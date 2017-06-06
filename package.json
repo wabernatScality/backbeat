@@ -21,7 +21,7 @@
   },
   "homepage": "https://github.com/scality/backbeat#readme",
   "dependencies": {
-    "arsenal": "scality/Arsenal",
+    "arsenal": "scality/Arsenal#ft/S3C-301-recordLogAPI",
     "async": "^2.3.0",
     "eslint": "^2.4.0",
     "eslint-config-airbnb": "^6.0.0",
