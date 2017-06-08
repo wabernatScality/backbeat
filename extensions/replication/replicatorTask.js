@@ -8,7 +8,7 @@ const logger = new Logger('Backbeat:Replication',
                           { level: 'info', dump: 'error' });
 const log = logger.newRequestLogger();
 
-//FIXME: should be from config object
+// FIXME: should be from config object
 const raftConfig = {
     repds: [
         { host: '172.17.0.2', adminPort: 4205 },
@@ -17,29 +17,30 @@ const raftConfig = {
         { host: '172.17.0.2', adminPort: 4208 },
         { host: '172.17.0.2', adminPort: 4209 },
     ],
-}
+};
 
 const zookeeperConfig = { host: 'localhost', port: 2181 };
 const bucketFileConfig = { host: '172.17.0.2', port: 9990 };
 
 const replicationConfig = {
-    //scality: {
+    // scality: {
     //    replicateRaftSessions: [0],
-    //},
+    // },
     file: bucketFileConfig,
     cronRule: '*/5 * * * * *',
     batchMaxRead: 10000,
 };
 
 
+/* eslint-disable no-param-reassign */
 function queueBatch(replicatorState, taskState) {
-    if (replicatorState.batchInProgress) {
+    if (taskState.batchInProgress) {
         log.warn('skipping replication batch: ' +
                  'previous one still in progress');
         return undefined;
     }
     log.debug('start queueing replication batch');
-    replicatorState.batchInProgress = true;
+    taskState.batchInProgress = true;
     replicatorApi.processAllLogEntries(
         replicatorState, { maxRead: replicationConfig.batchMaxRead },
         log, (err, counters) => {
@@ -51,15 +52,16 @@ function queueBatch(replicatorState, taskState) {
                           .bind(log);
                 logFunc('replication batch finished', { counters });
             }
-            replicatorState.batchInProgress = false;
+            taskState.batchInProgress = false;
         });
     return undefined;
 }
+/* eslint-enable no-param-reassign */
 
 async.waterfall([
     done => {
         if (replicationConfig.scality !== undefined) {
-            //FIXME do this for all replicated raft sessions
+            // FIXME choose configured raft session
             replicatorApi.openRaftLog(raftConfig, 0, log, done);
         } else if (replicationConfig.file !== undefined) {
             replicatorApi.openBucketFileLog(bucketFileConfig, log, done);
@@ -74,11 +76,11 @@ async.waterfall([
         const taskState = {
             batchInProgress: false,
         };
-        const queueJob = schedule.scheduleJob(replicationConfig.cronRule, () => {
+        schedule.scheduleJob(replicationConfig.cronRule, () => {
             queueBatch(replicatorState, taskState);
         });
         done();
-    }
+    },
 ], err => {
     if (err) {
         log.error('error during replicator initialization', { error: err });

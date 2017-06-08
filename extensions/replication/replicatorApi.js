@@ -3,7 +3,6 @@ const zookeeper = require('node-zookeeper-client');
 
 const arsenal = require('arsenal');
 const { isMasterKey } = require('arsenal/lib/versioning/Version');
-const Logger = require('werelogs').Logger;
 const BackbeatProducer = require('../../lib/BackbeatProducer');
 const MetadataFileClient = arsenal.storage.metadata.MetadataFileClient;
 const raftAdmin = arsenal.storage.metadata.raftAdmin;
@@ -11,7 +10,7 @@ const raftAdmin = arsenal.storage.metadata.raftAdmin;
 function openRaftLog(raftConfig, raftSession, log, done) {
     log.info('initializing raft log handle',
              { method: 'openRaftLog', raftConfig, raftSession });
-    // TODO find the leader session here
+    // TODO query a follower of the session
     const { host, adminPort } = raftConfig.repds[raftSession];
     const url = `http://${host}:${adminPort}`;
     const raftLogState = {
@@ -55,7 +54,7 @@ function writeLastProcessedSeq(replicatorState, log, done) {
                 zkPath: pathToLastProcessedSeq,
                 lastProcessedSeq });
     zkClient.setData(
-        pathToLastProcessedSeq, Buffer(lastProcessedSeq.toString()), -1,
+        pathToLastProcessedSeq, new Buffer(lastProcessedSeq.toString()), -1,
         err => {
             if (err) {
                 log.error('error saving last processed sequence number',
@@ -71,7 +70,7 @@ function readLastProcessedSeq(replicatorState, log, done) {
     const zkClient = replicatorState.zkClient;
     const pathToLastProcessedSeq = replicatorState.pathToLastProcessedSeq;
     replicatorState.zkClient.getData(
-        pathToLastProcessedSeq, (err, data, stat) => {
+        pathToLastProcessedSeq, (err, data) => {
             if (err) {
                 if (err.name !== 'NO_NODE') {
                     log.error('Could not fetch latest processed ' +
@@ -155,7 +154,7 @@ function createReplicator(logState, zookeeperConfig, log, cb) {
                 replicatorState.lastProcessedSeq = seq;
                 return done();
             });
-        }
+        },
     ], err => {
         if (err) {
             log.error('Error starting up replicator',
@@ -190,6 +189,7 @@ function logEntryToQueueEntry(record, entry, log) {
     return null;
 }
 
+/* eslint-disable no-param-reassign */
 function processLogEntries(replicatorState, params, log, cb) {
     const producer = replicatorState.producer;
     const logProxy = replicatorState.logState.logProxy;
@@ -258,23 +258,23 @@ function processLogEntries(replicatorState, params, log, cb) {
                 return writeLastProcessedSeq(replicatorState, log, next);
             }
             return next();
-        }], err => {
-            if (err) {
-                return cb(err);
-            }
-            return cb(null, {
-                read: nbLogEntriesRead,
-                queued: entriesToPublish.length,
-                lastProcessedSeq:
-                replicatorState.lastProcessedSeq,
-                processedAll: (!params || !params.maxRead
-                               || nbLogEntriesRead < params.maxRead),
-            });
+        }],
+    err => {
+        if (err) {
+            return cb(err);
+        }
+        return cb(null, {
+            read: nbLogEntriesRead,
+            queued: entriesToPublish.length,
+            lastProcessedSeq:
+            replicatorState.lastProcessedSeq,
+            processedAll: (!params || !params.maxRead
+                           || nbLogEntriesRead < params.maxRead),
         });
+    });
     return undefined;
 }
-
-
+/* eslint-enable no-param-reassign */
 
 function processAllLogEntries(replicatorState, params, log, done) {
     const countersTotal = {

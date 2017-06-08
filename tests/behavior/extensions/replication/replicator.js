@@ -8,7 +8,7 @@ const replicatorApi =
           require('../../../../extensions/replication/replicatorApi');
 const Logger = require('werelogs').Logger;
 const logger = new Logger('Backbeat:Replication:test', {
-    level: 'debug', dump: 'info'
+    level: 'debug', dump: 'info',
 });
 const log = logger.newRequestLogger();
 
@@ -19,7 +19,7 @@ const s3config = {
     endpoint: `${testConfig.s3transport}://${testConfig.s3ipAddress}:8000`,
     s3ForcePathStyle: true,
     credentials: new AWS.Credentials(testConfig.accessKey,
-                                     testConfig.secretKey)
+                                     testConfig.secretKey),
 };
 const zookeeperConfig = {
     host: testConfig.zookeeperIpAddress,
@@ -40,15 +40,15 @@ describe('replicator', () => {
         async.waterfall([
             next => {
                 s3.createBucket({
-                    Bucket: testBucket
+                    Bucket: testBucket,
                 }, next);
             },
             (data, next) => {
                 s3.putBucketVersioning(
                     { Bucket: testBucket,
                       VersioningConfiguration: {
-                          Status: 'Enabled'
-                      }
+                          Status: 'Enabled',
+                      },
                     }, next);
             },
             (data, next) => {
@@ -59,12 +59,12 @@ describe('replicator', () => {
                           Rules: [{
                               Destination: {
                                   Bucket: 'arn:aws:s3:::dummy-dest-bucket',
-                                  StorageClass: 'STANDARD'
+                                  StorageClass: 'STANDARD',
                               },
                               Prefix: '',
-                              Status: 'Enabled'
-                          }]
-                      }
+                              Status: 'Enabled',
+                          }],
+                      },
                     }, next);
             },
             (data, next) => {
@@ -85,7 +85,7 @@ describe('replicator', () => {
                 // have a non-empty log already
                 latestLastProcessedSeq = counters.lastProcessedSeq;
                 next();
-            }
+            },
         ], err => {
             assert.ifError(err);
             done();
@@ -95,7 +95,7 @@ describe('replicator', () => {
         async.waterfall([
             next => {
                 next();
-            }
+            },
         ], done);
     });
 
@@ -131,7 +131,7 @@ describe('replicator', () => {
                     lastProcessedSeq: latestLastProcessedSeq + 2 });
                 latestLastProcessedSeq = counters.lastProcessedSeq;
                 next();
-            }
+            },
         ], err => {
             assert.ifError(err);
             done();
@@ -155,7 +155,7 @@ describe('replicator', () => {
                     lastProcessedSeq: latestLastProcessedSeq + 2 });
                 latestLastProcessedSeq = counters.lastProcessedSeq;
                 next();
-            }
+            },
         ], err => {
             assert.ifError(err);
             done();
