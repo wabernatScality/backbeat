@@ -174,7 +174,7 @@ function logEntryToQueueEntry(record, entry, log) {
         if (! isMasterKey(entry.key) &&
             value.replicationInfo &&
             value.replicationInfo.status === 'PENDING') {
-            log.trace('pushing entry', { entry });
+            log.trace('queueing entry', { entry });
             const queueEntry = {
                 type: entry.type,
                 bucket: record.db,
@@ -204,19 +204,19 @@ function processLogEntries(replicatorState, params, log, cb) {
     const entriesToPublish = [];
     let nbLogEntriesRead = 0;
     async.waterfall([
-        done => {
+        next => {
             log.debug('reading records', { readOptions });
             logProxy.readRecords(readOptions, (err, recordStream) => {
                 if (err) {
                     log.error('error while reading log records',
                               { method: 'log.readRecords',
                                 error: err, errorStack: err.stack });
-                    return done(err);
+                    return next(err);
                 }
-                return done(err, recordStream);
+                return next(err, recordStream);
             });
         },
-        (recordStream, done) => {
+        (recordStream, next) => {
             recordStream.on('data', record => {
                 record.entries.forEach(entry => {
                     nbLogEntriesRead += 1;
@@ -229,32 +229,35 @@ function processLogEntries(replicatorState, params, log, cb) {
             });
             recordStream.on('end', () => {
                 log.debug('ending record stream');
-                done();
+                next();
             });
         },
-        done => {
+        next => {
             if (entriesToPublish.length > 0) {
                 return producer.send(entriesToPublish, err => {
                     if (err) {
                         log.error('error publishing entries from log',
                                   { method: 'log.readRecords',
                                     error: err, errorStack: err.stack });
-                        return done(err);
+                        return next(err);
                     }
                     replicatorState.lastProcessedSeq =
                         lastProcessedSeq + nbLogEntriesRead;
                     log.debug('entries published successfully',
                               { entryCount: entriesToPublish.length,
                                 lastProcessedSeq });
-                    return done();
+                    return next();
                 });
             }
             replicatorState.lastProcessedSeq =
                 lastProcessedSeq + nbLogEntriesRead;
-            return done();
+            return next();
         },
-        done => {
-            return writeLastProcessedSeq(replicatorState, log, done);
+        next => {
+            if (nbLogEntriesRead > 0) {
+                return writeLastProcessedSeq(replicatorState, log, next);
+            }
+            return next();
         }], err => {
             if (err) {
                 return cb(err);

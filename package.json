@@ -28,6 +28,7 @@
     "eslint-config-scality": "scality/Guidelines",
     "eslint-plugin-react": "^4.2.3",
     "kafka-node": "^1.6.0",
+    "node-schedule": "^1.2.0",
     "werelogs": "scality/werelogs"
   },
   "devDependencies": {

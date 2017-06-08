@@ -4,7 +4,8 @@ const schedule = require('node-schedule');
 const errors = require('arsenal').errors;
 const replicatorApi = require('./replicatorApi');
 const Logger = require('werelogs').Logger;
-const logger = new Logger('Backbeat:Replication');
+const logger = new Logger('Backbeat:Replication',
+                          { level: 'info', dump: 'error' });
 const log = logger.newRequestLogger();
 
 //FIXME: should be from config object
@@ -37,7 +38,7 @@ function queueBatch(replicatorState, taskState) {
                  'previous one still in progress');
         return undefined;
     }
-    log.info('start queueing replication batch');
+    log.debug('start queueing replication batch');
     replicatorState.batchInProgress = true;
     replicatorApi.processAllLogEntries(
         replicatorState, { maxRead: replicationConfig.batchMaxRead },
@@ -46,7 +47,9 @@ function queueBatch(replicatorState, taskState) {
                 log.error('an error occurred during replication',
                           { error: err, errorStack: err.stack });
             } else {
-                log.info('replication batch finished', { counters });
+                const logFunc = (counters.read > 0 ? log.info : log.debug)
+                          .bind(log);
+                logFunc('replication batch finished', { counters });
             }
             replicatorState.batchInProgress = false;
         });
