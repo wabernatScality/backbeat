@@ -7,7 +7,7 @@ const S3 = AWS.S3;
 const replicatorApi =
           require('../../../../extensions/replication/replicatorApi');
 const Logger = require('werelogs').Logger;
-const logger = new Logger('Backbeat:Replication:test', {
+const logger = new Logger('Backbeat:Replication:QueuePopulator:test', {
     level: 'debug', dump: 'info',
 });
 const log = logger.newRequestLogger();
@@ -16,17 +16,18 @@ const testConfig = require('../../../config.json');
 const testBucket = 'replicator-test-bucket';
 
 const s3config = {
-    endpoint: `${testConfig.s3transport}://${testConfig.s3ipAddress}:8000`,
+    endpoint: `${testConfig.s3.transport}://` +
+        `${testConfig.s3.ipAddress}:${testConfig.s3.port}`,
     s3ForcePathStyle: true,
-    credentials: new AWS.Credentials(testConfig.accessKey,
-                                     testConfig.secretKey),
+    credentials: new AWS.Credentials(testConfig.s3.accessKey,
+                                     testConfig.s3.secretKey),
 };
 const zookeeperConfig = {
-    host: testConfig.zookeeperIpAddress,
+    host: testConfig.zookeeper.ipAddress,
     port: 2181,
 };
 const bucketFileConfig = {
-    host: testConfig.s3ipAddress,
+    host: testConfig.s3.ipAddress,
     port: 9990,
 };
 
@@ -80,9 +81,9 @@ describe('replicator', () => {
                     replicatorState, { maxRead: 10 }, log, next);
             },
             (counters, next) => {
-                // we need to fetch what is the current last processed
-                // sequence number because the storage backend may
-                // have a non-empty log already
+                // we need to save the current last processed sequence
+                // number because the storage backend may have an
+                // existing non-empty log
                 latestLastProcessedSeq = counters.lastProcessedSeq;
                 next();
             },

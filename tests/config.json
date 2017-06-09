@@ -1,7 +1,12 @@
 {
-    "accessKey": "accessKey1",
-    "secretKey": "verySecretKey1",
-    "s3transport": "http",
-    "s3ipAddress": "127.0.0.1",
-    "zookeeperIpAddress": "127.0.0.1"
+    "s3": {
+        "accessKey": "accessKey1",
+        "secretKey": "verySecretKey1",
+        "transport": "http",
+        "ipAddress": "127.0.0.1",
+        "port": 8000
+    },
+    "zookeeper": {
+        "ipAddress": "127.0.0.1"
+    }
 }
