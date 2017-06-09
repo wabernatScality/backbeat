@@ -162,4 +162,42 @@ describe('replicator', () => {
             done();
         });
     });
+    it('processAllLogEntries with 100 objects to replicate in 20 batches',
+    done => {
+        async.waterfall([
+            next => {
+                let nbDone = 0;
+                for (let i = 0; i < 100; ++i) {
+                    s3.putObject({
+                        Bucket: testBucket,
+                        Key: `keyToReplicate_${i}`,
+                        Body: 'howdy',
+                        Tagging: 'mytag=mytagvalue'
+                    }, err => {
+                        assert.ifError(err);
+                        ++nbDone;
+                        if (nbDone === 100) {
+                            next();
+                        }
+                    });
+                }
+            },
+            next => {
+                replicatorApi.processAllLogEntries(
+                    replicatorState, { maxRead: 10 }, log, next);
+            },
+            (counters, next) => {
+                // 2 reads expected: master key and and versioned key
+                // 1 queued: versioned key only
+                assert.deepStrictEqual(counters, {
+                    read: 200, queued: 100,
+                    lastProcessedSeq: latestLastProcessedSeq + 200 });
+                latestLastProcessedSeq = counters.lastProcessedSeq;
+                next();
+            },
+        ], err => {
+            assert.ifError(err);
+            done();
+        });
+    });
 });
