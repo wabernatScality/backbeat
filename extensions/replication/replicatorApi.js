@@ -193,30 +193,36 @@ function logEntryToQueueEntry(record, entry, log) {
 function processLogEntries(replicatorState, params, log, cb) {
     const producer = replicatorState.producer;
     const logProxy = replicatorState.logState.logProxy;
-    const lastProcessedSeq = replicatorState.lastProcessedSeq;
     const readOptions = {};
-    if (lastProcessedSeq !== undefined) {
-        readOptions.startSeq = lastProcessedSeq + 1;
+    if (replicatorState.lastProcessedSeq !== undefined) {
+        readOptions.startSeq = replicatorState.lastProcessedSeq + 1;
     }
     if (params && params.maxRead !== undefined) {
         readOptions.limit = params.maxRead;
     }
     const entriesToPublish = [];
     let nbLogEntriesRead = 0;
+    let logInfo;
     async.waterfall([
         next => {
             log.debug('reading records', { readOptions });
-            logProxy.readRecords(readOptions, (err, recordStream) => {
+            logProxy.readRecords(readOptions, (err, res) => {
                 if (err) {
                     log.error('error while reading log records',
                               { method: 'log.readRecords',
                                 error: err, errorStack: err.stack });
                     return next(err);
                 }
-                return next(err, recordStream);
+                log.debug('readRecords callback',
+                          { method: 'log.readRecords',
+                            info: res.info });
+                return next(err, res);
             });
         },
-        (recordStream, next) => {
+        (res, next) => {
+            logInfo = res.info;
+            const recordStream = res.log;
+
             recordStream.on('data', record => {
                 record.entries.forEach(entry => {
                     nbLogEntriesRead += 1;
@@ -241,16 +247,15 @@ function processLogEntries(replicatorState, params, log, cb) {
                                     error: err, errorStack: err.stack });
                         return next(err);
                     }
-                    replicatorState.lastProcessedSeq =
-                        lastProcessedSeq + nbLogEntriesRead;
+                    replicatorState.lastProcessedSeq = logInfo.end;
                     log.debug('entries published successfully',
                               { entryCount: entriesToPublish.length,
-                                lastProcessedSeq });
+                                lastProcessedSeq:
+                                replicatorState.lastProcessedSeq });
                     return next();
                 });
             }
-            replicatorState.lastProcessedSeq =
-                lastProcessedSeq + nbLogEntriesRead;
+            replicatorState.lastProcessedSeq = logInfo.end;
             return next();
         },
         next => {
@@ -266,8 +271,7 @@ function processLogEntries(replicatorState, params, log, cb) {
         return cb(null, {
             read: nbLogEntriesRead,
             queued: entriesToPublish.length,
-            lastProcessedSeq:
-            replicatorState.lastProcessedSeq,
+            lastProcessedSeq: replicatorState.lastProcessedSeq,
             processedAll: (!params || !params.maxRead
                            || nbLogEntriesRead < params.maxRead),
         });
