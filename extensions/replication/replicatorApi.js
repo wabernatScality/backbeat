@@ -12,9 +12,8 @@ function openRaftLog(raftConfig, raftSession, log, done) {
              { method: 'openRaftLog', raftConfig, raftSession });
     // TODO query a follower of the session
     const { host, adminPort } = raftConfig.repds[raftSession];
-    const url = `http://${host}:${adminPort}`;
     const raftLogState = {
-        logProxy: raftAdmin.openRecordLog({ url, logger: log }),
+        logProxy: raftAdmin.openRecordLog({ host, adminPort, logger: log }),
         raftSession,
     };
     setImmediate(() => done(null, raftLogState));
@@ -221,6 +220,9 @@ function processLogEntries(replicatorState, params, log, cb) {
         },
         (res, next) => {
             logInfo = res.info;
+            if (logInfo.end === null) {
+                return next();
+            }
             const recordStream = res.log;
 
             recordStream.on('data', record => {
@@ -232,6 +234,12 @@ function processLogEntries(replicatorState, params, log, cb) {
                         entriesToPublish.push(queueEntry);
                     }
                 });
+            });
+            recordStream.on('error', err => {
+                log.error('error fetching entries from log',
+                          { method: 'log.readRecords',
+                            error: err });
+                return next(err);
             });
             recordStream.on('end', () => {
                 log.debug('ending record stream');
@@ -255,7 +263,9 @@ function processLogEntries(replicatorState, params, log, cb) {
                     return next();
                 });
             }
-            replicatorState.lastProcessedSeq = logInfo.end;
+            if (logInfo.end !== null) {
+                replicatorState.lastProcessedSeq = logInfo.end;
+            }
             return next();
         },
         next => {
