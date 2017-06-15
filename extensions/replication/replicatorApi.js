@@ -169,7 +169,7 @@ function createReplicator(logState, zookeeperConfig, log, cb) {
 function logEntryToQueueEntry(record, entry, log) {
     if (entry.type === 'put') {
         const value = JSON.parse(entry.value);
-        if (! isMasterKey(entry.key) &&
+        if (entry.key && ! isMasterKey(entry.key) &&
             value.replicationInfo &&
             value.replicationInfo.status === 'PENDING') {
             log.trace('queueing entry', { entry });
