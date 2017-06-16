@@ -8,14 +8,16 @@ const logger = new Logger('Backbeat:Replication:QueuePopulator',
                           { level: 'info', dump: 'error' });
 const log = logger.newRequestLogger();
 
+const HOST = '144.217.45.252';
+
 // FIXME: should be from config object
 const raftConfig = {
     repds: [
-        { host: '172.17.0.2', adminPort: 4205 },
-        { host: '172.17.0.2', adminPort: 4206 },
-        { host: '172.17.0.2', adminPort: 4207 },
-        { host: '172.17.0.2', adminPort: 4208 },
-        { host: '172.17.0.2', adminPort: 4209 },
+        { host: HOST, adminPort: 4500 },
+        { host: HOST, adminPort: 4510 },
+        { host: HOST, adminPort: 4520 },
+        { host: HOST, adminPort: 4530 },
+        { host: HOST, adminPort: 4540 },
     ],
 };
 
@@ -24,8 +26,8 @@ const bucketFileConfig = { host: '172.17.0.2', port: 9990 };
 
 const replicationConfig = {
     source: {
-        s3backend: 'file',
-        s3backendConfig: bucketFileConfig,
+        s3backend: 'scality',
+        s3backendConfig: raftConfig,
     },
     cronRule: '*/5 * * * * *',
     batchMaxRead: 10000,
@@ -48,7 +50,8 @@ function queueBatch(replicatorState, taskState) {
                 log.error('an error occurred during replication',
                           { error: err, errorStack: err.stack });
             } else {
-                const logFunc = (counters.read > 0 ? log.info : log.debug)
+                const logFunc = (counters.readRecords > 0 ?
+                                 log.info : log.debug)
                           .bind(log);
                 logFunc('replication batch finished', { counters });
             }
