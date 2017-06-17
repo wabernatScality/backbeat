@@ -12,13 +12,7 @@ const HOST = '144.217.45.252';
 
 // FIXME: should be from config object
 const raftConfig = {
-    repds: [
-        { host: HOST, adminPort: 4500 },
-        { host: HOST, adminPort: 4510 },
-        { host: HOST, adminPort: 4520 },
-        { host: HOST, adminPort: 4530 },
-        { host: HOST, adminPort: 4540 },
-    ],
+    bucketd: { host: HOST, port: 9000 },
 };
 
 const zookeeperConfig = { host: 'localhost', port: 2181 };

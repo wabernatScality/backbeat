@@ -11,9 +11,10 @@ function openRaftLog(raftConfig, raftSession, log, done) {
     log.info('initializing raft log handle',
              { method: 'openRaftLog', raftConfig, raftSession });
     // TODO query a follower of the session
-    const { host, adminPort } = raftConfig.repds[raftSession];
+    const { host, port } = raftConfig.bucketd;
     const raftLogState = {
-        logProxy: raftAdmin.openRecordLog({ host, adminPort, logger: log }),
+        logProxy: raftAdmin.openRecordLog({ host, port, logger: log,
+                                            raftSession }),
         raftSession,
     };
     setImmediate(() => done(null, raftLogState));
