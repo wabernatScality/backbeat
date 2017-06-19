@@ -7,11 +7,12 @@ const BackbeatProducer = require('../../lib/BackbeatProducer');
 const MetadataFileClient = arsenal.storage.metadata.MetadataFileClient;
 const raftAdmin = arsenal.storage.metadata.raftAdmin;
 
-function openRaftLog(raftConfig, raftSession, log, done) {
+function openRaftLog(raftConfig, log, done) {
     log.info('initializing raft log handle',
-             { method: 'openRaftLog', raftConfig, raftSession });
+             { method: 'openRaftLog', raftConfig });
     // TODO query a follower of the session
     const { host, port } = raftConfig.bucketd;
+    const raftSession = raftConfig.raftSession;
     const raftLogState = {
         logProxy: raftAdmin.openRecordLog({ host, port, logger: log,
                                             raftSession }),

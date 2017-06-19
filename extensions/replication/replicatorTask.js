@@ -13,6 +13,7 @@ const HOST = '144.217.45.252';
 // FIXME: should be from config object
 const raftConfig = {
     bucketd: { host: HOST, port: 9000 },
+    raftSession: 1,
 };
 
 const zookeeperConfig = { host: 'localhost', port: 2181 };
@@ -64,7 +65,7 @@ async.waterfall([
             replicatorApi.openBucketFileLog(backendConfig, log, done);
             break ;
         case 'scality':
-            replicatorApi.openRaftLog(backendConfig, 0, log, done);
+            replicatorApi.openRaftLog(backendConfig, log, done);
             break ;
         default:
             log.error('expect s3backend type to be "scality" or "file"');
