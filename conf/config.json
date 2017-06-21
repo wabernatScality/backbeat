@@ -1,0 +1,31 @@
+{
+    "zookeeper": {
+        "host": "127.0.0.1",
+        "port": 2181
+    },
+    "kafka": {
+        "host": "127.0.0.1",
+        "port": 9092
+    },
+    "extensions": {
+        "replication": {
+            "source": {
+                "host": "127.0.0.1",
+                "s3Port": 8000,
+                "vaultPort": 8500
+            },
+            "destination": {
+                "host": "127.0.0.2",
+                "s3Port": 9000,
+                "vaultPort": 9500
+            },
+            "topic": "backbeat-replication",
+            "partition": 1,
+            "groupId": "backbeat-replication-group"
+        }
+    },
+    "log": {
+        "logLevel": "info",
+        "dumpLevel": "error"
+    }
+}
