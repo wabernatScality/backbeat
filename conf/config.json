@@ -17,10 +17,14 @@
             "destination": {
                 "host": "127.0.0.2",
                 "s3Port": 9000,
-                "vaultPort": 9500
+                "vaultPort": 9500,
+                "certFilePaths": {
+                    "key": "",
+                    "cert": "",
+                    "ca": ""
+                }
             },
             "topic": "backbeat-replication",
-            "partition": 1,
             "groupId": "backbeat-replication-group"
         }
     },
