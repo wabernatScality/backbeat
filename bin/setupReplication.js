@@ -2,346 +2,227 @@ const async = require('async');
 const commander = require('commander');
 const { S3, IAM, SharedIniFileCredentials } = require('aws-sdk');
 
+const { Logger } = require('werelogs');
 const config = require('../conf/Config');
 
-const { source, destination } = config.extensions.replication;
-const sourceCredentials = new SharedIniFileCredentials({profile: 'backbeatsource'});
-const destinationCredentials = new SharedIniFileCredentials({profile: 'backbeatdestination'});
+// TRUST POLICY
+const trustPolicy = {
+    Version: '2012-10-17',
+    Statement: [
+        {
+            Effect: 'Allow',
+            Principal: {
+                Service: 'backbeat', /* "s3.amazonaws.com" */
+            },
+            Action: 'sts:AssumeRole',
+        },
+    ],
+};
+
+// RESOURCE POLICY
+function _buildResourcePolicy(source, target) {
+    return {
+        Version: '2012-10-17',
+        Statement: [
+            {
+                Effect: 'Allow',
+                Action: [
+                    's3:GetObjectVersion',
+                    's3:GetObjectVersionAcl',
+                ],
+                Resource: [
+                    `arn:aws:s3:::${source}/*`,
+                ],
+            },
+            {
+                Effect: 'Allow',
+                Action: [
+                    's3:ListBucket',
+                    's3:GetReplicationConfiguration',
+                ],
+                Resource: [
+                    `arn:aws:s3:::${source}`,
+                ],
+            },
+            {
+                Effect: 'Allow',
+                Action: [
+                    's3:ReplicateObject',
+                    's3:ReplicateDelete',
+                ],
+                Resource: `arn:aws:s3:::${target}/*`,
+            },
+        ],
+    };
+}
+
+function _setupS3Client(host, port, profile) {
+    const credentials = new SharedIniFileCredentials({ profile });
+    return new S3({
+        endpoint: `http://${host}:${port}`,
+        sslEnabled: false,
+        credentials,
+        s3ForcePathStyle: true,
+    });
+}
 
 
-//////////////////////
-// Commander Stuffs //
-//////////////////////
+function _setupIAMClient(host, port, profile) {
+    const credentials = new SharedIniFileCredentials({ profile });
+    return new IAM({
+        endpoint: `http://${host}:${port}`,
+        sslEnabled: false,
+        credentials,
+        s3ForcePathStyle: true,
+    });
+}
+
+class _SetupReplication {
+
+    constructor(sourceBucket, targetBucket, config) {
+        const { source, destination } = config.extensions.replication;
+        this._sourceBucket = sourceBucket;
+        this._targetBucket = targetBucket;
+        this._s3 = {
+            source: _setupS3Client(source.s3.host, source.s3.port,
+                'backbeatsource'),
+            target: _setupS3Client(destination.s3.host, destination.s3.port,
+                'backbeattarget'),
+        };
+        this._iam = {
+            source: _setupIAMClient(source.iam.host, source.iam.port,
+                'backbeatsource'),
+            target: _setupIAMClient(destination.iam.host, destination.iam.port,
+                'backbeattarget'),
+        };
+    }
+
+    _createBucket(where, cb) {
+        const bucket = where === 'source' ? this._sourceBucket :
+            this._targetBucket;
+        this._s3[where].createBucket({ Bucket: bucket }, cb);
+    }
+
+    _createRole(where, cb) {
+        const params = {
+            AssumeRolePolicyDocument: encodeURIComponent(
+                JSON.stringify(trustPolicy)),
+            RoleName: `bb-replication-${Date.now()}`,
+            Path: '/',
+        };
+        this._iam[where].createRole(params, cb);
+    }
+
+    _createPolicy(where, cb) {
+        const params = {
+            PolicyDocument: JSON.stringify(
+                _buildResourcePolicy(this._sourceBucket, this._targetBucket)),
+            PolicyName: `bb-replication-${Date.now()}`,
+        };
+        this._iam[where].createPolicy(params, cb);
+    }
+
+    _enableVersioning(where, cb) {
+        const bucket = where === 'source' ? this._sourceBucket :
+            this._targetBucket;
+        const params = {
+            Bucket: bucket,
+            VersioningConfiguration: {
+                Status: 'Enabled',
+            },
+        };
+        this._s3[where].putBucketVersioning(params, cb);
+    }
+
+    _attachResourcePolicy(policyArn, roleName, where, cb) {
+        const params = {
+            PolicyArn: policyArn,
+            RoleName: roleName,
+        };
+        this._iam[where].attachRolePolicy(params, cb);
+    }
+
+    _enableReplication(roleArns, cb) {
+        const params = {
+            Bucket: this._sourceBucket,
+            ReplicationConfiguration: {
+                Role: roleArns,
+                Rules: [{
+                    Destination: {
+                        Bucket: `arn:aws:s3:::${this._targetBucket}`,
+                    },
+                    Prefix: '',
+                    Status: 'Enabled',
+                }],
+            },
+        };
+
+        this.s3.source.putBucketReplication(params, cb);
+    }
+
+    _parallelTasks(cb) {
+        async.parallel({
+            sourceBucket: this._createBucket('source', cb),
+            targetBucket: this._createBucket('target', cb),
+            sourceRole: this._createRole('source', cb),
+            targetRole: this._createRole('target', cb),
+            sourcePolicy: this._createPolicy('source', cb),
+            targetPolicy: this._createPolicy('target', cb),
+        }, cb);
+    }
+
+    _seriesTasks(data, cb) {
+        const roleArns = `${data.sourceRole.arn},${data.targetRole.arn}`;
+        async.series([
+            next => this._enableVersioning('source', next),
+            next => this._enableVersioning('target', next),
+            next => this._attachResourcePolicy(data.sourcePolicy.arn,
+                data.sourceRole.arn, 'source', next),
+            next => this._attachResourcePolicy(data.targetPolicy.arn,
+                data.targetPolicy.arn, 'target', next),
+            next => this._enableReplication(roleArns, next),
+        ], cb);
+    }
+
+    run(cb) {
+        async.waterfall([
+            next => this._parallelTasks(next),
+            (setupInfo, next) => this._seriesTasks(setupInfo, next),
+        ], cb);
+    }
+}
+
+// const sourceCredentials = new SharedIniFileCredentials({
+//     profile: 'backbeatsource',
+// });
+// const destinationCredentials = new SharedIniFileCredentials({
+//     profile: 'backbeatdestination',
+// });
+
+
 // NOTE: Use commander to initiate action of the script
 // Wrap the async and setup calls into a function
-
-let sourceName;
-let destinationName;
-
 commander
   .version('0.1.0')
   // .usage('<source> <destination>')
   .arguments('<source> <destination>')
-  .action(function (source, destination) {
-     sourceName = source;
-     destinationName = destination;
- });
+  .action((source, destination) => {
+      const log = new Logger('BackbeatSetup').newRequestLogger();
+      const s = new _SetupReplication(source, destination, config);
+      s.run(err => {
+          if (err) {
+              return log.error('error setting up replication', {
+                  method: 'commander.action',
+                  error: err.message,
+                  errStack: err.stack,
+              });
+          }
+          return log.info('replication setup successfully');
+      });
+  });
 
 commander.parse(process.argv);
 if (!commander.args.length) {
-    commander.help()
+    commander.help();
     process.exit(1);
 }
-
-
-//////////////////////////////
-// Instantiate S3 Instances //
-//////////////////////////////
-const sourceOptions = {
-    endpoint: `http://${source.s3.host}:${source.s3.port}`,
-    sslEnabled: false,
-    credentials:  sourceCredentials,
-    s3ForcePathStyle: true,
-}
-
-const destinationOptions = {
-    endpoint: `http://${destination.s3.host}:${destination.s3.port}`,
-    sslEnabled: false,
-    credentials: destinationCredentials,
-    s3ForcePathStyle: true,
-    // region: 'us-west-1'
-}
-
-const sourceS3 = new S3(sourceOptions);
-const destinationS3 = new S3(destinationOptions);
-
-const iamSource = new IAM(sourceOptions);
-const iamDestination = new IAM(destinationOptions);
-
-
-/////////////////////////
-// Hard-Coded Policies //
-/////////////////////////
-// TRUST POLICY
-const trustPolicy = {
-   "Version":"2012-10-17",
-   "Statement":[
-      {
-         "Effect":"Allow",
-         "Principal":{
-            "Service":"backbeat"  /* "s3.amazonaws.com" */
-         },
-         "Action":"sts:AssumeRole"
-      }
-   ]
-}
-
-// RESOURCE POLICY
-const resourcePolicy = {
-    "Version":"2012-10-17",
-    "Statement":[
-        {
-            "Effect":"Allow",
-            "Action":[
-                "s3:GetObjectVersion",
-                "s3:GetObjectVersionAcl"
-            ],
-            "Resource":[
-                `arn:aws:s3:::${source}/*`
-            ]
-        },
-        {
-            "Effect":"Allow",
-            "Action":[
-                "s3:ListBucket",
-                "s3:GetReplicationConfiguration"
-            ],
-            "Resource":[
-                `arn:aws:s3:::${source}`
-            ]
-        },
-        {
-            "Effect":"Allow",
-            "Action":[
-                "s3:ReplicateObject",
-                "s3:ReplicateDelete"
-            ],
-            "Resource":`arn:aws:s3:::${destination}/*`
-        }
-    ]
-}
-
-
-//////////////////////
-// Helper Functions //
-//////////////////////
-
-// CREATE Functions
-function _createBucket(s3Instance, bucket) {
-    s3Instance.createBucket({ Bucket: bucket }, (err, data) => {
-        if (err) {
-            throw err;
-        } else {
-            console.log(data);
-        }
-    });
-}
-
-function _createRole(iamInstance, name, source, destination, next) {
-    const validPolicy = encodeURIComponent(JSON.stringify(resourcePolicy));
-
-    let params = {
-        AssumeRolePolicyDocument: validPolicy,
-        RoleName: name,  // NOTE: Refactor out 'name' param
-        Path: '/'
-    };
-
-    iamInstance.createRole(params, (err, data) => {
-        if (err) {
-            next(err);
-        } else {
-            next(null, data);
-        }
-    });
-}
-
-function _createPolicy(iamInstance, policyName, next) {
-    const params = {
-        PolicyDocument: JSON.stringify(resourcePolicy),
-        PolicyName: policyName
-    }
-
-    iamInstance.createPolicy(params, (err, data) => {
-        if (err) {
-            next(err);
-        } else {
-            next(null, data);
-        }
-    })
-}
-
-// EDIT/PUT Functions
-function _addVersioning(s3Instance, bucket, next) {
-    let params = {
-        Bucket: bucket,
-        VersioningConfiguration: {
-            Status: 'Enabled'
-        }
-    }
-
-    s3Instance.putBucketVersioning(params, (err, data) => {
-        if (err) {
-            next(err);
-        } else {
-            next(null, data);
-        }
-    })
-}
-
-function _attachRolePolicy(iamInstance, arn, name) {
-    const params = {
-        PolicyArn: arn,
-        RoleName: name
-    }
-
-    iamInstance.attachRolePolicy(params, (err, data) => {
-        // NOTE: Throwing here because outside of async.parallel
-        if (err) throw(err);
-
-        console.log(data);
-    })
-}
-
-function _addReplication(s3Instance, arn, source, destination) {
-    let params = {
-        Bucket: source,
-        ReplicationConfiguration: {
-            Role: arn,
-            Rules: [{
-                Destination: {
-                    Bucket: `arn:aws:s3:::${destination}`
-                },
-                Prefix: '',
-                Status: Enabled
-            }]
-        }
-    }
-
-    s3Instance.putBucketReplication(params, (err, data) => {
-        // NOTE: Throwing here because outside of async.parallel
-        if (err) throw (err);
-
-        console.log(data);
-    })
-}
-
-
-///////////////
-// Do stuffs //
-///////////////
-
-// NOTE: Don't think I need to do series for most operations here.
-// The return data is not used in many cases except for roles.
-
-// create source bucket, target bucket (done)
-// enable versioning for source and target bucket (done)
-// create roles on source and target with assume role trust policy (done)
-
-// create resource policies allowing replication actions for BB on source and target
-// attach these policies to the roles created in the prior step
-// enable replication configuration on the source bucket with the config including the role details and target bucket name.
-
-// async.parallel
-async.series({
-    bucket1: (next) => {
-        _createBucket(sourceS3, sourceName);
-        _addVersioning(sourceS3, sourceName, next);
-    },
-    bucket2: (next) => {
-        _createBucket(destinationS3, destinationName);
-        _addVersioning(destinationS3, destinationName, next);
-    },
-    // sourceRole: (next) => {
-    //     _createRole(iamSource, 'Test-Source', sourceName, destinationName, next);
-    //     /*
-    //     data = {
-    //      Role: {
-    //       Arn: "arn:aws:iam::123456789012:role/Test-Role",
-    //       AssumeRolePolicyDocument: "<URL-encoded-JSON>",
-    //       CreateDate: <Date Representation>,
-    //       Path: "/",
-    //       RoleId: "AKIAIOSFODNN7EXAMPLE",
-    //       RoleName: "Test-Role"
-    //      }
-    //     }
-    //     */
-    // },
-    // destinationRole: (next) => {
-    //     _createRole(iamDestination, 'Test-Destination', sourceName, destinationName, next);
-    // },
-    // sourcePolicy: (next) => {
-    //     _createPolicy(iamSource, 'sourcePolicy', next);
-    // },
-    // destinationPolicy: (next) => {
-    //     _createPolicy(iamDestination, 'destinationPolicy', next);
-    // }
-}, (err, result) => {
-    if (err) throw (err);
-
-    console.log("ending;")
-    console.log(result);
-
-    // const sourceArn = result.sourcePolicy.Policy.Arn;
-    // const destinationArn = result.destinationPolicy.Policy.Arn;
-    // const sourceRoleName = result.sourceRole.Role.RoleName;
-    // const destinationRoleName = result.destinationRole.Role.RoleName;
-    //
-    // // Attach policies to roles
-    // //_attachRolePolicy(iamInstance, arn, name, next) {
-    // _attachRolePolicy(iamSource, sourceArn, sourceRoleName);
-    // _attachRolePolicy(iamDestination, destinationArn, destinationRoleName);
-    //
-    // // Enable replication
-    // addReplication(sourceS3, sourceArn, sourceName, destinationName);
-})
-
-
-
-
-
-//
-// "source": {
-//     "s3": {
-//         "host": "127.0.0.1",
-//         "port": 8000,
-//         "transport": "https"
-//     },
-//     "auth": {
-//         "type": "account",
-//         "account": "bart",
-//         "vault": {
-//             "host": "127.0.0.1",
-//             "port": 8500
-//         }
-//     },
-//     "logSource": "dmd",
-//     "bucketd": {
-//         "host": "127.0.0.1",
-//         "port": 9000,
-//         "raftSession": 1
-//     },
-//     "dmd": {
-//         "host": "127.0.0.1",
-//         "port": 9990
-//     }
-// },
-// "destination": {
-//     "s3": {
-//         "host": "127.0.0.2",
-//         "port": 9000,
-//         "transport": "https"
-//     },
-//     "auth": {
-//         "type": "account",
-//         "account": "lisa",
-//         "vault": {
-//             "host": "127.0.0.2",
-//             "port": 9500
-//         }
-//     },
-//     "certFilePaths": {
-//         "key": "ssl/key.pem",
-//         "cert": "ssl/cert.crt",
-//         "ca": "ssl/ca.crt"
-//     }
-// },
-// "topic": "backbeat-replication",
-// "queuePopulator": {
-//     "cronRule": "*/5 * * * * *",
-//     "batchMaxRead": 10000,
-//     "zookeeperPath": "/replication-populator"
-// },
-// "queueProcessor": {
-//     "groupId": "backbeat-replication-group"
-// }
-//
