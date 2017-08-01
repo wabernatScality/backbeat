@@ -114,19 +114,31 @@ class _SetupReplication {
     }
 
     _checkSanity(cb) {
-        async.waterfall({
-            first: next => this._isValidBucket('source', next),
-            second: next => this._isValidBucket('target', next),
-            third: next => this._isVersioningEnabled('source', next),
-            fourth: next => this._isVersioningEnabled('target', next),
-            fifth: next => this._isReplicationEnabled('source', next),
-            sixth: (next, srcArn, tgtArn) => {
-                this._isValidRole('source', srcArn, err => {
-                    if (err) next(err);
-                });
-                this._isValidRole('target', tgtArn, next);
-            },
-        }, cb);
+        async.waterfall([
+            next => this._isValidBucket('source', (err, res) => {
+                next(err, res);
+            }),
+            (arg, next) => this._isValidBucket('target', (err, res) => {
+                next(err, res);
+            }),
+            (arg, next) => this._isVersioningEnabled('source', (err, res) => {
+                next(err, res);
+            }),
+            (arg, next) => this._isVersioningEnabled('target', (err, res) => {
+                next(err, res);
+            }),
+            // (arg, next) => this._isReplicationEnabled('source', (err, res) => {
+            //     next(err, res);
+            // }),
+            // (next, srcArn, tgtArn) => {
+            //     this._isValidRole('source', srcArn, err => {
+            //         if (err) next(err);
+            //     });
+            //     this._isValidRole('target', tgtArn, next);
+            // },
+        ], (err, res) => {
+            cb(err, res);
+        });
     }
 
     _isValidBucket(where, cb) {
@@ -312,7 +324,7 @@ class _SetupReplication {
                 }],
             },
         };
-        this.s3.source.putBucketReplication(params, (err, res) => {
+        this._s3.source.putBucketReplication(params, (err, res) => {
             if (err) {
                 this._log.error('error enabling replication', {
                     method: '_SetupReplication._enableReplication',
@@ -343,16 +355,23 @@ class _SetupReplication {
     }
 
     _seriesTasks(data, cb) {
-        const roleArns = `${data.sourceRole.arn},${data.targetRole.arn}`;
+        const sourceRole = data.sourceRole.Role;
+        const targetRole = data.targetRole.Role;
+        const sourcePolicyArn = data.sourcePolicy.Policy.Arn;
+        const targetPolicyArn = data.targetPolicy.Policy.Arn;
+        const roleArns = `${sourceRole.Arn},${targetRole.Arn}`;
+
         async.series([
             next => this._enableVersioning('source', next),
             next => this._enableVersioning('target', next),
-            next => this._attachResourcePolicy(data.sourcePolicy.arn,
-                data.sourceRole.arn, 'source', next),
-            next => this._attachResourcePolicy(data.targetPolicy.arn,
-                data.targetPolicy.arn, 'target', next),
+            next => this._attachResourcePolicy(sourcePolicyArn,
+                sourceRole.RoleName, 'source', next),
+            next => this._attachResourcePolicy(targetPolicyArn,
+                targetRole.RoleName, 'target', next),
             next => this._enableReplication(roleArns, next),
-        ], cb);
+        ], (err, res) => {
+            cb(err, res);
+        });
     }
 
     run(cb) {
@@ -360,35 +379,14 @@ class _SetupReplication {
             next => this._parallelTasks((err, setupInfo) => {
                 next(err, setupInfo);
             }),
-            (setupInfo, next) => this._seriesTasks(setupInfo, next),
-            next => this._checkSanity(next),
+            (setupInfo, next) => this._seriesTasks(setupInfo, (err, res) => {
+                next(err, res);
+            }),
+            (solo, next) => this._checkSanity((err, res) => {
+                next(err, res);
+            }),
         ], cb);
     }
-}
-
-
-function _crBucket(s3Instance, bucket, cb) {
-    s3Instance.createBucket({ Bucket: bucket }, (err, data) => {
-        if (err) {
-            cb(err);
-        } else {
-            cb(null);
-        }
-    });
-}
-
-function _crRole(iamInstance, cb) {
-    const params = {
-        AssumeRolePolicyDocument: JSON.stringify(trustPolicy),
-        RoleName: `bb-replication-${Date.now()}`,
-        Path: '/',
-    };
-    iamInstance.createRole(params, (err, res) => {
-        if (err) {
-            return cb(err);
-        }
-        return cb(null, res);
-    });
 }
 
 commander
@@ -397,62 +395,14 @@ commander
   .action((source, destination) => {
       const log = new Logger('BackbeatSetup').newRequestLogger();
       const s = new _SetupReplication(source, destination, log, config);
-      s.run(err => {
+      s.run((err, res) => {
           if (err) {
+              log.info(err);
               return log.info('replication script failed');
           }
+          log.info(res);
           return log.info('replication setup successful');
       });
-
-    //   const src = config.extensions.replication.source;
-    //   const dst = config.extensions.replication.destination;
-    //   const s = _setupS3Client(src.s3.host, src.s3.port,
-    //         'backbeatsource');
-    //   const d = _setupS3Client(dst.s3.host, dst.s3.port,
-    //         'backbeattarget');
-    //   const sc = _setupIAMClient(src.auth.vault.host,
-    //        src.auth.vault.iamPort,
-    //       'backbeatsource');
-    //   const dc = _setupIAMClient(dst.auth.vault.host,
-    //        dst.auth.vault.iamPort,
-    //       'backbeattarget');
-      //
-    //   async.series({
-    //       one: next => _crBucket(s, source, (err, res) => {
-    //           if (err) {
-    //               return next(err);
-    //           }
-    //           console.log('success in one');
-    //           return next(null, res);
-    //       }),
-    //       two: next => _crBucket(d, destination, (err, res) => {
-    //           if (err) {
-    //               return next(err);
-    //           }
-    //           console.log('success in two');
-    //           return next(null, res);
-    //       }),
-    //       three: next => _crRole(dc, (err, res) => {
-    //           if (err) {
-    //               return next(err);
-    //           }
-    //           console.log('success in three');
-    //           return next(null, res);
-    //       }),
-    //       four: next => _crRole(sc, (err, res) => {
-    //           if (err) {
-    //               return next(err);
-    //           }
-    //           console.log('success in four');
-    //           return next(null, res);
-    //       }),
-    //   }, (err, suc) => {
-    //       if (err) {
-    //           console.log(err);
-    //       } else {
-    //           console.log(suc);
-    //       }
-    //   })
   });
 
 commander.parse(process.argv);
