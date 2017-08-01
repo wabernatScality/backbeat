@@ -3,23 +3,22 @@ const commander = require('commander');
 const { S3, IAM, SharedIniFileCredentials } = require('aws-sdk');
 
 const { Logger } = require('werelogs');
+
 const config = require('../conf/Config');
 
-// TRUST POLICY
 const trustPolicy = {
     Version: '2012-10-17',
     Statement: [
         {
             Effect: 'Allow',
             Principal: {
-                Service: 'backbeat', /* "s3.amazonaws.com" */
+                Service: 'backbeat',
             },
             Action: 'sts:AssumeRole',
         },
     ],
 };
 
-// RESOURCE POLICY
 function _buildResourcePolicy(source, target) {
     return {
         Version: '2012-10-17',
@@ -63,6 +62,7 @@ function _setupS3Client(host, port, profile) {
         sslEnabled: false,
         credentials,
         s3ForcePathStyle: true,
+        region: 'file',
     });
 }
 
@@ -73,14 +73,28 @@ function _setupIAMClient(host, port, profile) {
         endpoint: `http://${host}:${port}`,
         sslEnabled: false,
         credentials,
+        maxRetries: 0,
+        region: 'file',
+        signatureCache: false,
         s3ForcePathStyle: true,
+        httpOptions: {
+            timeout: 1000,
+        },
     });
 }
 
 class _SetupReplication {
-
-    constructor(sourceBucket, targetBucket, config) {
+    /**
+     * This class sets up two buckets for replication.
+     * @constructor
+     * @param {String} sourceBucket - Source Bucket Name
+     * @param {String} targetBucket - Destination Bucket Name
+     * @param {Object} log - Werelogs Request Logger object
+     * @param {Object} config - bucket configurations
+     */
+    constructor(sourceBucket, targetBucket, log, config) {
         const { source, destination } = config.extensions.replication;
+        this._log = log;
         this._sourceBucket = sourceBucket;
         this._targetBucket = targetBucket;
         this._s3 = {
@@ -90,27 +104,124 @@ class _SetupReplication {
                 'backbeattarget'),
         };
         this._iam = {
-            source: _setupIAMClient(source.iam.host, source.iam.port,
+            source: _setupIAMClient(source.auth.vault.host,
+                 source.auth.vault.iamPort,
                 'backbeatsource'),
-            target: _setupIAMClient(destination.iam.host, destination.iam.port,
+            target: _setupIAMClient(destination.auth.vault.host,
+                 destination.auth.vault.iamPort,
                 'backbeattarget'),
         };
+    }
+
+    _checkSanity(cb) {
+        async.waterfall({
+            first: next => this._isValidBucket('source', next),
+            second: next => this._isValidBucket('target', next),
+            third: next => this._isVersioningEnabled('source', next),
+            fourth: next => this._isVersioningEnabled('target', next),
+            fifth: next => this._isReplicationEnabled('source', next),
+            sixth: (next, srcArn, tgtArn) => {
+                this._isValidRole('source', srcArn, err => {
+                    if (err) next(err);
+                });
+                this._isValidRole('target', tgtArn, next);
+            },
+        }, cb);
+    }
+
+    _isValidBucket(where, cb) {
+        // Does the bucket exist and is it reachable?
+        const bucket = where === 'source' ? this._sourceBucket :
+            this._targetBucket;
+        this._s3[where].headBucket({ Bucket: bucket }, err => {
+            if (err) {
+                return cb(err);
+            }
+            return cb(null);
+        });
+    }
+
+    _isVersioningEnabled(where, cb) {
+        // Does the bucket have versioning enabled?
+        const bucket = where === 'source' ? this._sourceBucket :
+            this._targetBucket;
+        this._s3[where].getBucketVersioning({ Bucket: bucket }, (err, res) => {
+            if (err || res.Status === 'Disabled') {
+                return cb(err);
+            }
+            return cb(null);
+        });
+    }
+
+    _isValidRole(where, arn, cb) {
+        // Is the role mentioned in the replication config available in IAM
+
+        // Goal is to get Role given known ARN.
+        // If err, there is no matching role
+        const roleName = arn.split('/').pop();
+        this._iam[where].getRole({ RoleName: roleName }, (err, res) => {
+            if (err || arn !== res.Role.Arn) {
+                return cb(err);
+            }
+            return cb(null);
+        });
+    }
+
+    _isReplicationEnabled(src, cb) {
+        // Is the Replication config enabled?
+        this._s3[src].getBucketReplication({ Bucket: src }, (err, res) => {
+            const r = res.ReplicationConfiguration;
+            if (err || r.Rules[0].Status === 'Disabled') {
+                return cb(err);
+            }
+            return cb(null, r.Role, r.Rules[0].Destination.Bucket);
+        });
     }
 
     _createBucket(where, cb) {
         const bucket = where === 'source' ? this._sourceBucket :
             this._targetBucket;
-        this._s3[where].createBucket({ Bucket: bucket }, cb);
+        this._s3[where].createBucket({ Bucket: bucket }, (err, res) => {
+            if (err) {
+                this._log.error('error creating a bucket', {
+                    method: '_SetupReplication._createBucket',
+                    error: err.message,
+                    errStack: err.stack,
+                });
+                return cb(err);
+            }
+            this._log.debug('Created bucket', {
+                bucket: where,
+                response: res,
+                method: '_createBucket',
+            });
+            return cb(null, err);
+        });
     }
 
     _createRole(where, cb) {
         const params = {
-            AssumeRolePolicyDocument: encodeURIComponent(
-                JSON.stringify(trustPolicy)),
+            AssumeRolePolicyDocument: JSON.stringify(trustPolicy),
             RoleName: `bb-replication-${Date.now()}`,
             Path: '/',
         };
-        this._iam[where].createRole(params, cb);
+
+        this._iam[where].createRole(params, (err, res) => {
+            if (err) {
+                this._log.error('error creating a role', {
+                    method: '_SetupReplication._createRole',
+                    error: err.message,
+                    errStack: err.stack,
+                });
+                return cb(err);
+            }
+            this._log.debug('Created role', {
+                bucket: where,
+                response: res,
+                method: '_createRole',
+            });
+            return cb(null, res);
+        });
     }
 
     _createPolicy(where, cb) {
@@ -119,7 +230,22 @@ class _SetupReplication {
                 _buildResourcePolicy(this._sourceBucket, this._targetBucket)),
             PolicyName: `bb-replication-${Date.now()}`,
         };
-        this._iam[where].createPolicy(params, cb);
+        this._iam[where].createPolicy(params, (err, res) => {
+            if (err) {
+                this._log.error('error creating policy', {
+                    method: '_SetupReplication._createPolicy',
+                    error: err.message,
+                    errStack: err.stack,
+                });
+                return cb(err);
+            }
+            this._log.debug('Created policy', {
+                bucket: where,
+                response: res,
+                method: '_createPolicy',
+            });
+            return cb(null, res);
+        });
     }
 
     _enableVersioning(where, cb) {
@@ -131,7 +257,22 @@ class _SetupReplication {
                 Status: 'Enabled',
             },
         };
-        this._s3[where].putBucketVersioning(params, cb);
+        this._s3[where].putBucketVersioning(params, (err, res) => {
+            if (err) {
+                this._log.error('error enabling versioning', {
+                    method: '_SetupReplication._enableVersioning',
+                    error: err.message,
+                    errStack: err.stack,
+                });
+                return cb(err);
+            }
+            this._log.debug('Versioning enabled', {
+                bucket: where,
+                response: res,
+                method: '_enableVersioning',
+            });
+            return cb(null, res);
+        });
     }
 
     _attachResourcePolicy(policyArn, roleName, where, cb) {
@@ -139,7 +280,22 @@ class _SetupReplication {
             PolicyArn: policyArn,
             RoleName: roleName,
         };
-        this._iam[where].attachRolePolicy(params, cb);
+        this._iam[where].attachRolePolicy(params, (err, res) => {
+            if (err) {
+                this._log.error('error attaching resource policy', {
+                    method: '_SetupReplication._attachResourcePolicy',
+                    error: err.message,
+                    errStack: err.stack,
+                });
+                return cb(err);
+            }
+            this._log.debug('Attached resource policy', {
+                bucket: where,
+                response: res,
+                method: '_attachResourcePolicy',
+            });
+            return cb(null, res);
+        });
     }
 
     _enableReplication(roleArns, cb) {
@@ -156,19 +312,34 @@ class _SetupReplication {
                 }],
             },
         };
-
-        this.s3.source.putBucketReplication(params, cb);
+        this.s3.source.putBucketReplication(params, (err, res) => {
+            if (err) {
+                this._log.error('error enabling replication', {
+                    method: '_SetupReplication._enableReplication',
+                    error: err.message,
+                    errStack: err.stack,
+                });
+                return cb(err);
+            }
+            this._log.debug('Bucket replication enabled', {
+                response: res,
+                method: '_enableReplication',
+            });
+            return cb(null, res);
+        });
     }
 
     _parallelTasks(cb) {
         async.parallel({
-            sourceBucket: this._createBucket('source', cb),
-            targetBucket: this._createBucket('target', cb),
-            sourceRole: this._createRole('source', cb),
-            targetRole: this._createRole('target', cb),
-            sourcePolicy: this._createPolicy('source', cb),
-            targetPolicy: this._createPolicy('target', cb),
-        }, cb);
+            sourceBucket: next => this._createBucket('source', next),
+            targetBucket: next => this._createBucket('target', next),
+            sourceRole: next => this._createRole('source', next),
+            targetRole: next => this._createRole('target', next),
+            sourcePolicy: next => this._createPolicy('source', next),
+            targetPolicy: next => this._createPolicy('target', next),
+        }, (err, res) => {
+            cb(err, res);
+        });
     }
 
     _seriesTasks(data, cb) {
@@ -186,39 +357,102 @@ class _SetupReplication {
 
     run(cb) {
         async.waterfall([
-            next => this._parallelTasks(next),
+            next => this._parallelTasks((err, setupInfo) => {
+                next(err, setupInfo);
+            }),
             (setupInfo, next) => this._seriesTasks(setupInfo, next),
+            next => this._checkSanity(next),
         ], cb);
     }
 }
 
-// const sourceCredentials = new SharedIniFileCredentials({
-//     profile: 'backbeatsource',
-// });
-// const destinationCredentials = new SharedIniFileCredentials({
-//     profile: 'backbeatdestination',
-// });
 
+function _crBucket(s3Instance, bucket, cb) {
+    s3Instance.createBucket({ Bucket: bucket }, (err, data) => {
+        if (err) {
+            cb(err);
+        } else {
+            cb(null);
+        }
+    });
+}
 
-// NOTE: Use commander to initiate action of the script
-// Wrap the async and setup calls into a function
+function _crRole(iamInstance, cb) {
+    const params = {
+        AssumeRolePolicyDocument: JSON.stringify(trustPolicy),
+        RoleName: `bb-replication-${Date.now()}`,
+        Path: '/',
+    };
+    iamInstance.createRole(params, (err, res) => {
+        if (err) {
+            return cb(err);
+        }
+        return cb(null, res);
+    });
+}
+
 commander
   .version('0.1.0')
-  // .usage('<source> <destination>')
   .arguments('<source> <destination>')
   .action((source, destination) => {
       const log = new Logger('BackbeatSetup').newRequestLogger();
-      const s = new _SetupReplication(source, destination, config);
+      const s = new _SetupReplication(source, destination, log, config);
       s.run(err => {
           if (err) {
-              return log.error('error setting up replication', {
-                  method: 'commander.action',
-                  error: err.message,
-                  errStack: err.stack,
-              });
+              return log.info('replication script failed');
           }
-          return log.info('replication setup successfully');
+          return log.info('replication setup successful');
       });
+
+    //   const src = config.extensions.replication.source;
+    //   const dst = config.extensions.replication.destination;
+    //   const s = _setupS3Client(src.s3.host, src.s3.port,
+    //         'backbeatsource');
+    //   const d = _setupS3Client(dst.s3.host, dst.s3.port,
+    //         'backbeattarget');
+    //   const sc = _setupIAMClient(src.auth.vault.host,
+    //        src.auth.vault.iamPort,
+    //       'backbeatsource');
+    //   const dc = _setupIAMClient(dst.auth.vault.host,
+    //        dst.auth.vault.iamPort,
+    //       'backbeattarget');
+      //
+    //   async.series({
+    //       one: next => _crBucket(s, source, (err, res) => {
+    //           if (err) {
+    //               return next(err);
+    //           }
+    //           console.log('success in one');
+    //           return next(null, res);
+    //       }),
+    //       two: next => _crBucket(d, destination, (err, res) => {
+    //           if (err) {
+    //               return next(err);
+    //           }
+    //           console.log('success in two');
+    //           return next(null, res);
+    //       }),
+    //       three: next => _crRole(dc, (err, res) => {
+    //           if (err) {
+    //               return next(err);
+    //           }
+    //           console.log('success in three');
+    //           return next(null, res);
+    //       }),
+    //       four: next => _crRole(sc, (err, res) => {
+    //           if (err) {
+    //               return next(err);
+    //           }
+    //           console.log('success in four');
+    //           return next(null, res);
+    //       }),
+    //   }, (err, suc) => {
+    //       if (err) {
+    //           console.log(err);
+    //       } else {
+    //           console.log(suc);
+    //       }
+    //   })
   });
 
 commander.parse(process.argv);
