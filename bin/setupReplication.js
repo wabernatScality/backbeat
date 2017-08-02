@@ -97,13 +97,13 @@ class _SetupReplication {
         this._log = log;
         this._sourceBucket = sourceBucket;
         this._targetBucket = targetBucket;
-        this._s3 = {
+        this._s3Clients = {
             source: _setupS3Client(source.s3.host, source.s3.port,
                 'backbeatsource'),
             target: _setupS3Client(destination.s3.host, destination.s3.port,
                 'backbeattarget'),
         };
-        this._iam = {
+        this._iamClients = {
             source: _setupIAMClient(source.auth.vault.host,
                  source.auth.vault.iamPort,
                 'backbeatsource'),
@@ -115,43 +115,21 @@ class _SetupReplication {
 
     _checkSanity(cb) {
         return async.waterfall([
-            next => this._isValidBucket('source', (err, res) => {
-                next(err, res);
-            }),
-            (args, next) => this._isValidBucket('target', (err, res) => {
-                next(err, res);
-            }),
-            (args, next) => this._isVersioningEnabled('source', (err, res) => {
-                next(err, res);
-            }),
-            (args, next) => this._isVersioningEnabled('target', (err, res) => {
-                next(err, res);
-            }),
-            (args, next) => this._isReplicationEnabled('source',
-                (err, srcArn) => {
-                    next(err, srcArn);
-                }
-            ),
-            (srcArn, next) => this._isValidRole('source', srcArn,
-                (err, tgtArn) => {
-                    next(err, tgtArn);
-                }
-            ),
-            (tgtArn, next) => this._isValidRole('target', tgtArn,
-                (err, res) => {
-                    next(err, res);
-                }
-            ),
-        ], (err, res) => {
-            cb(err, res);
-        });
+            next => this._isValidBucket('source', next),
+            next => this._isValidBucket('target', next),
+            next => this._isVersioningEnabled('source', next),
+            next => this._isVersioningEnabled('target', next),
+            next => this._isReplicationEnabled('source', next),
+            (srcArn, next) => this._isValidRole('source', srcArn, next),
+            (tgtArn, next) => this._isValidRole('target', tgtArn, next),
+        ], cb);
     }
 
     _isValidBucket(where, cb) {
         // Does the bucket exist and is it reachable?
         const bucket = where === 'source' ? this._sourceBucket :
             this._targetBucket;
-        this._s3[where].headBucket({ Bucket: bucket }, err => {
+        this._s3Clients[where].headBucket({ Bucket: bucket }, err => {
             if (err) {
                 this._log.error('bucket sanity check error', {
                     method: '_SetupReplication._isValidBucket',
@@ -168,17 +146,19 @@ class _SetupReplication {
         // Does the bucket have versioning enabled?
         const bucket = where === 'source' ? this._sourceBucket :
             this._targetBucket;
-        this._s3[where].getBucketVersioning({ Bucket: bucket }, (err, res) => {
-            if (err || res.Status === 'Disabled') {
-                this._log.error('versioning sanity check error', {
-                    method: '_SetupReplication._isVersioningEnabled',
-                    error: err.message,
-                    errStack: err.stack,
-                });
-                return cb(err);
+        this._s3Clients[where].getBucketVersioning({ Bucket: bucket },
+            (err, res) => {
+                if (err || res.Status === 'Disabled') {
+                    this._log.error('versioning sanity check error', {
+                        method: '_SetupReplication._isVersioningEnabled',
+                        error: err.message,
+                        errStack: err.stack,
+                    });
+                    return cb(err);
+                }
+                return cb();
             }
-            return cb();
-        });
+        );
     }
 
     _isValidRole(where, arn, cb) {
@@ -196,7 +176,7 @@ class _SetupReplication {
         }
         const namesOnly = roleName.split('/').pop();
 
-        this._iam[where].getRole({ RoleName: namesOnly }, (err, res) => {
+        this._iamClients[where].getRole({ RoleName: namesOnly }, (err, res) => {
             if (err || roleName !== res.Role.Arn) {
                 this._log.error('role validation sanity check error', {
                     method: '_SetupReplication._isValidRole',
@@ -211,7 +191,8 @@ class _SetupReplication {
 
     _isReplicationEnabled(src, cb) {
         // Is the Replication config enabled?
-        this._s3[src].getBucketReplication({ Bucket: this._sourceBucket },
+        this._s3Clients[src].getBucketReplication(
+            { Bucket: this._sourceBucket },
             (err, res) => {
                 const r = res.ReplicationConfiguration;
                 if (err || r.Rules[0].Status === 'Disabled') {
@@ -230,7 +211,7 @@ class _SetupReplication {
     _createBucket(where, cb) {
         const bucket = where === 'source' ? this._sourceBucket :
             this._targetBucket;
-        this._s3[where].createBucket({ Bucket: bucket }, (err, res) => {
+        this._s3Clients[where].createBucket({ Bucket: bucket }, (err, res) => {
             if (err) {
                 this._log.error('error creating a bucket', {
                     method: '_SetupReplication._createBucket',
@@ -255,7 +236,7 @@ class _SetupReplication {
             Path: '/',
         };
 
-        this._iam[where].createRole(params, (err, res) => {
+        this._iamClients[where].createRole(params, (err, res) => {
             if (err) {
                 this._log.error('error creating a role', {
                     method: '_SetupReplication._createRole',
@@ -279,7 +260,7 @@ class _SetupReplication {
                 _buildResourcePolicy(this._sourceBucket, this._targetBucket)),
             PolicyName: `bb-replication-${Date.now()}`,
         };
-        this._iam[where].createPolicy(params, (err, res) => {
+        this._iamClients[where].createPolicy(params, (err, res) => {
             if (err) {
                 this._log.error('error creating policy', {
                     method: '_SetupReplication._createPolicy',
@@ -306,7 +287,7 @@ class _SetupReplication {
                 Status: 'Enabled',
             },
         };
-        this._s3[where].putBucketVersioning(params, (err, res) => {
+        this._s3Clients[where].putBucketVersioning(params, (err, res) => {
             if (err) {
                 this._log.error('error enabling versioning', {
                     method: '_SetupReplication._enableVersioning',
@@ -329,7 +310,7 @@ class _SetupReplication {
             PolicyArn: policyArn,
             RoleName: roleName,
         };
-        this._iam[where].attachRolePolicy(params, (err, res) => {
+        this._iamClients[where].attachRolePolicy(params, (err, res) => {
             if (err) {
                 this._log.error('error attaching resource policy', {
                     method: '_SetupReplication._attachResourcePolicy',
@@ -361,7 +342,7 @@ class _SetupReplication {
                 }],
             },
         };
-        this._s3.source.putBucketReplication(params, (err, res) => {
+        this._s3Clients.source.putBucketReplication(params, (err, res) => {
             if (err) {
                 this._log.error('error enabling replication', {
                     method: '_SetupReplication._enableReplication',
@@ -379,16 +360,14 @@ class _SetupReplication {
     }
 
     _parallelTasks(cb) {
-        async.parallel({
+        return async.parallel({
             sourceBucket: next => this._createBucket('source', next),
             targetBucket: next => this._createBucket('target', next),
             sourceRole: next => this._createRole('source', next),
             targetRole: next => this._createRole('target', next),
             sourcePolicy: next => this._createPolicy('source', next),
             targetPolicy: next => this._createPolicy('target', next),
-        }, (err, res) => {
-            cb(err, res);
-        });
+        }, cb);
     }
 
     _seriesTasks(data, cb) {
@@ -398,7 +377,7 @@ class _SetupReplication {
         const targetPolicyArn = data.targetPolicy.Policy.Arn;
         const roleArns = `${sourceRole.Arn},${targetRole.Arn}`;
 
-        async.series([
+        return async.series([
             next => this._enableVersioning('source', next),
             next => this._enableVersioning('target', next),
             next => this._attachResourcePolicy(sourcePolicyArn,
@@ -406,22 +385,14 @@ class _SetupReplication {
             next => this._attachResourcePolicy(targetPolicyArn,
                 targetRole.RoleName, 'target', next),
             next => this._enableReplication(roleArns, next),
-        ], (err, res) => {
-            cb(err, res);
-        });
+        ], cb);
     }
 
     run(cb) {
-        async.waterfall([
-            next => this._parallelTasks((err, setupInfo) => {
-                next(err, setupInfo);
-            }),
-            (setupInfo, next) => this._seriesTasks(setupInfo, (err, res) => {
-                next(err, res);
-            }),
-            (solo, next) => this._checkSanity((err, res) => {
-                next(err, res);
-            }),
+        return async.waterfall([
+            next => this._parallelTasks(next),
+            (setupInfo, next) => this._seriesTasks(setupInfo, next),
+            (args, next) => this._checkSanity(next),
         ], cb);
     }
 }
