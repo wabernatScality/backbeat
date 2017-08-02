@@ -114,28 +114,34 @@ class _SetupReplication {
     }
 
     _checkSanity(cb) {
-        async.waterfall([
+        return async.waterfall([
             next => this._isValidBucket('source', (err, res) => {
                 next(err, res);
             }),
-            (arg, next) => this._isValidBucket('target', (err, res) => {
+            (args, next) => this._isValidBucket('target', (err, res) => {
                 next(err, res);
             }),
-            (arg, next) => this._isVersioningEnabled('source', (err, res) => {
+            (args, next) => this._isVersioningEnabled('source', (err, res) => {
                 next(err, res);
             }),
-            (arg, next) => this._isVersioningEnabled('target', (err, res) => {
+            (args, next) => this._isVersioningEnabled('target', (err, res) => {
                 next(err, res);
             }),
-            // (arg, next) => this._isReplicationEnabled('source', (err, res) => {
-            //     next(err, res);
-            // }),
-            // (next, srcArn, tgtArn) => {
-            //     this._isValidRole('source', srcArn, err => {
-            //         if (err) next(err);
-            //     });
-            //     this._isValidRole('target', tgtArn, next);
-            // },
+            (args, next) => this._isReplicationEnabled('source',
+                (err, srcArn) => {
+                    next(err, srcArn);
+                }
+            ),
+            (srcArn, next) => this._isValidRole('source', srcArn,
+                (err, tgtArn) => {
+                    next(err, tgtArn);
+                }
+            ),
+            (tgtArn, next) => this._isValidRole('target', tgtArn,
+                (err, res) => {
+                    next(err, res);
+                }
+            ),
         ], (err, res) => {
             cb(err, res);
         });
@@ -147,9 +153,14 @@ class _SetupReplication {
             this._targetBucket;
         this._s3[where].headBucket({ Bucket: bucket }, err => {
             if (err) {
+                this._log.error('bucket sanity check error', {
+                    method: '_SetupReplication._isValidBucket',
+                    error: err.message,
+                    errStack: err.stack,
+                });
                 return cb(err);
             }
-            return cb(null);
+            return cb();
         });
     }
 
@@ -159,9 +170,14 @@ class _SetupReplication {
             this._targetBucket;
         this._s3[where].getBucketVersioning({ Bucket: bucket }, (err, res) => {
             if (err || res.Status === 'Disabled') {
+                this._log.error('versioning sanity check error', {
+                    method: '_SetupReplication._isVersioningEnabled',
+                    error: err.message,
+                    errStack: err.stack,
+                });
                 return cb(err);
             }
-            return cb(null);
+            return cb();
         });
     }
 
@@ -170,24 +186,45 @@ class _SetupReplication {
 
         // Goal is to get Role given known ARN.
         // If err, there is no matching role
-        const roleName = arn.split('/').pop();
-        this._iam[where].getRole({ RoleName: roleName }, (err, res) => {
-            if (err || arn !== res.Role.Arn) {
+        let roleName;
+        let tgtArn;
+
+        if (where === 'source') {
+            [roleName, tgtArn] = arn.split(',');
+        } else if (where === 'target') {
+            roleName = arn;
+        }
+        const namesOnly = roleName.split('/').pop();
+
+        this._iam[where].getRole({ RoleName: namesOnly }, (err, res) => {
+            if (err || roleName !== res.Role.Arn) {
+                this._log.error('role validation sanity check error', {
+                    method: '_SetupReplication._isValidRole',
+                    error: err.message,
+                    errStack: err.stack,
+                });
                 return cb(err);
             }
-            return cb(null);
+            return cb(err, tgtArn);
         });
     }
 
     _isReplicationEnabled(src, cb) {
         // Is the Replication config enabled?
-        this._s3[src].getBucketReplication({ Bucket: src }, (err, res) => {
-            const r = res.ReplicationConfiguration;
-            if (err || r.Rules[0].Status === 'Disabled') {
-                return cb(err);
+        this._s3[src].getBucketReplication({ Bucket: this._sourceBucket },
+            (err, res) => {
+                const r = res.ReplicationConfiguration;
+                if (err || r.Rules[0].Status === 'Disabled') {
+                    this._log.error('replication enabled sanity check error', {
+                        method: '_SetupReplication._isReplicationEnabled',
+                        error: err.message,
+                        errStack: err.stack,
+                    });
+                    return cb(err);
+                }
+                return cb(null, r.Role);
             }
-            return cb(null, r.Role, r.Rules[0].Destination.Bucket);
-        });
+        );
     }
 
     _createBucket(where, cb) {
@@ -207,7 +244,7 @@ class _SetupReplication {
                 response: res,
                 method: '_createBucket',
             });
-            return cb(null, err);
+            return cb(null, res);
         });
     }
 
