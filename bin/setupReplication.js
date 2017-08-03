@@ -62,7 +62,6 @@ function _setupS3Client(host, port, profile) {
         sslEnabled: false,
         credentials,
         s3ForcePathStyle: true,
-        region: 'file',
     });
 }
 
@@ -74,7 +73,7 @@ function _setupIAMClient(host, port, profile) {
         sslEnabled: false,
         credentials,
         maxRetries: 0,
-        region: 'file',
+        region: 'us-east-1',
         signatureCache: false,
         s3ForcePathStyle: true,
         httpOptions: {
@@ -399,16 +398,14 @@ class _SetupReplication {
 
 commander
   .version('0.1.0')
-  .arguments('<source> <destination>')
+  .arguments('<source-bucket> <destination-bucket>')
   .action((source, destination) => {
       const log = new Logger('BackbeatSetup').newRequestLogger();
       const s = new _SetupReplication(source, destination, log, config);
-      s.run((err, res) => {
+      s.run(err => {
           if (err) {
-              log.info(err);
-              return log.info('replication script failed');
+              return log.error('replication script failed');
           }
-          log.info(res);
           return log.info('replication setup successful');
       });
   });
