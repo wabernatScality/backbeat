@@ -50,7 +50,7 @@ const joiSchema = {
             queuePopulator: {
                 cronRule: joi.string().required(),
                 batchMaxRead: joi.number().default(10000),
-                zookeeperPath: joi.string().required(),
+                zookeeperPath: joi.string().allow('').required(),
             },
             queueProcessor: {
                 groupId: joi.string().required(),

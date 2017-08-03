@@ -1,6 +1,6 @@
 {
     "zookeeper": {
-        "endpoint": "127.0.0.1:2181/backbeat"
+        "endpoint": "127.0.0.1:2181"
     },
     "kafka": {
         "host": "127.0.0.1",
@@ -12,10 +12,10 @@
                 "s3": {
                     "host": "127.0.0.1",
                     "port": 8000,
-                    "transport": "https"
+                    "transport": "http"
                 },
                 "auth": {
-                    "type": "account",
+                    "type": "role",
                     "account": "bart",
                     "vault": {
                         "host": "127.0.0.1",
@@ -38,10 +38,10 @@
                 "s3": {
                     "host": "127.0.0.2",
                     "port": 8100,
-                    "transport": "https"
+                    "transport": "http"
                 },
                 "auth": {
-                    "type": "account",
+                    "type": "role",
                     "account": "lisa",
                     "vault": {
                         "host": "127.0.0.2",
@@ -55,11 +55,11 @@
                     "ca": "ssl/ca.crt"
                 }
             },
-            "topic": "backbeat-replication",
+            "topic": "backbeat-replication-test",
             "queuePopulator": {
                 "cronRule": "*/5 * * * * *",
                 "batchMaxRead": 10000,
-                "zookeeperPath": "/replication-populator"
+                "zookeeperPath": ""
             },
             "queueProcessor": {
                 "groupId": "backbeat-replication-group"
