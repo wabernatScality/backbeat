@@ -5,7 +5,6 @@ const { S3, IAM, SharedIniFileCredentials } = require('aws-sdk');
 const { Logger } = require('werelogs');
 
 const config = require('../conf/Config');
-const { proxyIAMPath } = require('../extensions/replication/constants');
 
 const trustPolicy = {
     Version: '2012-10-17',
@@ -59,7 +58,7 @@ function _buildResourcePolicy(source, target) {
 function _setupS3Client(transport, endpoint, profile) {
     const credentials = new SharedIniFileCredentials({ profile });
     return new S3({
-        endpoint: `${transport}://${endpoint}`,
+        endpoint: `${transport}://127.0.0.1:8000`,
         sslEnabled: transport === 'https',
         credentials,
         s3ForcePathStyle: true,
@@ -69,16 +68,12 @@ function _setupS3Client(transport, endpoint, profile) {
 function _setupIAMClient(transport, endpoint, profile) {
     const credentials = new SharedIniFileCredentials({ profile });
     return new IAM({
-        endpoint: `${transport}://${endpoint}`,
+        endpoint: `${transport}://127.0.0.1:8600`,
         sslEnabled: transport === 'https',
         credentials,
         maxRetries: 0,
         region: 'us-east-1',
         signatureCache: false,
-        httpOptions: {
-            timeout: 1000,
-            proxy: proxyIAMPath,
-        },
     });
 }
 
