@@ -2,6 +2,7 @@ const assert = require('assert');
 const AWS = require('aws-sdk');
 
 const errors = require('arsenal').errors;
+const ARN = require('arsenal').models.ARN;
 
 const authdata = require('../../../conf/authdata.json');
 
@@ -27,7 +28,16 @@ class AccountAuthManager {
             throw Error(`Configured account ${authConfig.account} has no ` +
                         '"displayName" property defined');
         }
-        this._accountArn = accountInfo.arn;
+        const accountArn = ARN.createFromString(accountInfo.arn);
+        if (accountArn.error !== undefined) {
+            throw Error(`Configured account ${authConfig.account} has a ` +
+                        `bad ARN "${accountInfo.arn}": ${accountArn.error}`);
+        }
+        if (!accountArn.isIAMAccount()) {
+            throw Error(`Configured account ${authConfig.account} ARN is ` +
+                        'not an account ARN');
+        }
+        this._accountArn = accountArn;
         this._canonicalID = accountInfo.canonicalID;
         this._displayName = accountInfo.displayName;
         this._credentials = new AWS.Credentials(accountInfo.keys.access,
@@ -39,7 +49,7 @@ class AccountAuthManager {
     }
 
     lookupAccountAttributes(accountId, cb) {
-        const localAccountId = this._accountArn.split(':')[4];
+        const localAccountId = this._accountArn.getAccountId();
         if (localAccountId !== accountId) {
             this._log.error('Target account for replication must match ' +
                             'configured destination account ARN',
