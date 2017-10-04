@@ -47,6 +47,12 @@ class Config {
                 }
             });
         }
+
+        const healthChecks = config.server.healthChecks.allowFrom;
+        if (healthChecks && healthChecks.length === 0) {
+            this.healthChecks = { allowFrom: ['127.0.0.1/8', '::1'] };
+        }
+
         // config is validated, safe to assign directly to the config object
         Object.assign(this, parsedConfig);
     }

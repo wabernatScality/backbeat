@@ -24,6 +24,16 @@ const joiSchema = {
     },
     log: logJoi,
     extensions: joi.object(),
+    metrics: {
+        topic: joi.string().required(),
+    },
+    server: {
+        healthChecks: joi.object({
+            allowFrom: joi.array().items(joi.string()).default([]),
+        }).required(),
+        host: joi.string().required(),
+        port: joi.number().default(8900),
+    },
 };
 
 module.exports = joiSchema;
