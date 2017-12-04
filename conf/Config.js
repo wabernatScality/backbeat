@@ -53,6 +53,12 @@ class Config {
             this.healthChecks = { allowFrom: ['127.0.0.1/8', '::1'] };
         }
 
+        // TODO: Drop this before merge
+        // default to standalone configuration if sentinel not setup
+        if (config.redis && !config.redis.sentinels) {
+            this.redis = { host: '127.0.0.1', port: 6379 };
+        }
+
         // config is validated, safe to assign directly to the config object
         Object.assign(this, parsedConfig);
     }
