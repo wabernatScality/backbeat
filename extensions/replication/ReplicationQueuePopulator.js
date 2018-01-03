@@ -23,6 +23,7 @@ class ReplicationQueuePopulator extends QueuePopulatorExtension {
         if (queueEntry.getReplicationStatus() !== 'PENDING') {
             return;
         }
+        console.log('ReplicationQueuePopulator.filter', Date.now());
         this.publish(this.repConfig.topic,
                      `${queueEntry.getBucket()}/${queueEntry.getObjectKey()}`,
                      JSON.stringify(entry));
