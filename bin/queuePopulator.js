@@ -9,7 +9,7 @@ const extConfigs = config.extensions;
 const qpConfig = config.queuePopulator;
 const QueuePopulator = require('../lib/queuePopulator/QueuePopulator');
 
-const log = new werelogs.Logger('Backbeat:QueuePopulator');
+const log = new werelogs.Logger('Backbeat:QueuePopulator').newRequestLogger();
 
 werelogs.configure({ level: config.log.logLevel,
     dump: config.log.dumpLevel });
