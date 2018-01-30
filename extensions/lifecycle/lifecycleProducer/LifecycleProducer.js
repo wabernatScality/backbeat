@@ -9,10 +9,13 @@ const { errors } = require('arsenal');
 
 const BackbeatProducer = require('../../../lib/BackbeatProducer');
 const BackbeatConsumer = require('../../../lib/BackbeatConsumer');
+const zookeeperHelper = require('../../../lib/clients/zookeeper');
+const LifecycleTask = require('../tasks/LifecycleTask');
 const VaultClientCache = require('../../../lib/clients/VaultClientCache');
 const safeJsonParse = require('../util/safeJsonParse');
 
 const CONSUMER_FETCH_MAX_BYTES = 5000020;
+const PROCESS_OBJECTS_ACTION = 'processObjects';
 
 /**
  * @class LifecycleProducer
@@ -53,8 +56,8 @@ class LifecycleProducer {
 
         // The task scheduler for processing lifecycle tasks concurrently.
         this._internalTaskScheduler = async.queue((ctx, cb) => {
-            const { task, rules, value } = ctx;
-            return task.processBucketEntry(rules, value, cb);
+            const { task, rules, value, s3target } = ctx;
+            return task.processBucketEntry(rules, value, s3target, cb);
         }, this._lcConfig.producer.concurrency);
 
         // Listen for errors from any task being processed.
@@ -89,14 +92,34 @@ class LifecycleProducer {
         this._bucketProducer.send(entries, cb);
     }
 
+    getQueuedBucketsZkPath() {
+        return `${this._lcConfig.zookeeperPath}/run/queuedBuckets`;
+    }
+
+    removeBucketFromQueued(bucketData) {
+        const zkPath = `${this.getQueuedBucketsZkPath()}/` +
+                  `${bucketData.target.owner}:${bucketData.target.bucket}`;
+        this._zkClient.remove(zkPath, -1, err => {
+            if (err) {
+                this._log.error(
+                    'could not remove queued bucket node from zookeeper',
+                    { ownerId: bucketData.target.owner,
+                      bucket: bucketData.target.bucket,
+                      zkPath,
+                      error: err.message });
+            }
+        });
+    }
+
     /**
      * Get the state variables of the current instance.
      * @return {Object} Object containing the state variables
      */
     getStateVars() {
         return {
-            sendBucketEntry: this.sendBucketEntry,
-            sendObjectEntry: this.sendObjectEntry,
+            sendBucketEntry: this.sendBucketEntry.bind(this),
+            sendObjectEntry: this.sendObjectEntry.bind(this),
+            removeBucketFromQueued: this.removeBucketFromQueued.bind(this),
             enabledRules: this._lcConfig.rules,
             log: this._log,
         };
@@ -143,7 +166,7 @@ class LifecycleProducer {
         // Check if backbeat config has a lifecycle rule enabled for processing.
         const enabled = Object.keys(rules).some(rule => rules[rule].enabled);
         if (!enabled) {
-            this.log.debug('no lifecycle rules enabled in backbeat config');
+            this._log.debug('no lifecycle rules enabled in backbeat config');
         }
         return enabled;
     }
@@ -155,25 +178,28 @@ class LifecycleProducer {
      * @param {Object} entry - The kafka entry containing the information for
      * performing a listing of the bucket's objects
      * @param {Object} entry.value - The value of the entry object
-     * @param {String} entry.value.bucket - The bucket which has objects to
-     * perform lifecycle actions on
-     * @param {String} entry.value.owner - The canonical ID of the bucket owner
-     * @param {String} [entry.value.prefix] - An object prefix
-     * @param {String} [entry.value.keyMarker] - KeyMarker to list objects from
-     * @param {String} [entry.value.versionIdMarker] - VersionIdMarker to list
-     * versioned objects from
-     * @param {String} [entry.value.continuationToken] - ContinuationToken
-     * indicating that the list is being continued on this bucket
+     * (see format of messages in lifecycle topic for bucket tasks)
      * @param {Function} cb - The callback to call
      * @return {undefined}
      */
     _processBucketEntry(entry, cb) {
         const { error, result } = safeJsonParse(entry.value);
         if (error) {
-            this._log.error('could not parse bucket entry', { error });
+            this._log.error('could not parse bucket entry',
+                            { value: entry.value, error });
             return process.nextTick(() => cb(error));
         }
-        const { bucket, owner } = result;
+        if (result.action !== PROCESS_OBJECTS_ACTION) {
+            return process.nextTick(cb);
+        }
+        if (typeof result.target !== 'object') {
+            this._log.error('malformed kafka bucket entry', {
+                method: 'LifecycleProducer._processBucketEntry',
+                entry: result,
+            });
+            return process.nextTick(() => cb(errors.InternalError));
+        }
+        const { bucket, owner } = result.target;
         if (!bucket || !owner) {
             this._log.error('kafka bucket entry missing required fields', {
                 method: 'LifecycleProducer._processBucketEntry',
@@ -182,32 +208,47 @@ class LifecycleProducer {
             });
             return process.nextTick(() => cb(errors.InternalError));
         }
+        this._log.debug('processing bucket entry', {
+            method: 'LifecycleProducer._processBucketEntry',
+            bucket,
+            owner,
+        });
         return async.waterfall([
             next => this._getAccountCredentials(owner, next),
             (accountCreds, next) => {
                 const s3 = this._getS3Client(accountCreds);
                 const params = { Bucket: bucket };
-                return s3.getBucketLifecycleConfiguration(params, next);
+                return s3.getBucketLifecycleConfiguration(params,
+                (err, data) => {
+                    next(err, data, s3);
+                });
             },
-        ], (err, config) => {
+        ], (err, config, s3) => {
             if (err) {
                 this._log.error('error getting bucket lifecycle config', {
+                    method: 'LifecycleProducer._processBucketEntry',
+                    bucket,
+                    owner,
                     error: err,
                 });
+                // end the bucket processing chain in case of error
+                this.removeBucketFromQueued(result);
                 return cb(err);
             }
             if (!this._shouldProcessConfig(config)) {
+                this.removeBucketFromQueued(result);
                 return cb();
             }
             this._log.info('scheduling new task for bucket lifecycle', {
-                bucket,
                 method: 'LifecycleProducer._processBucketEntry',
+                bucket,
+                owner,
             });
             return this._internalTaskScheduler.push({
-                // TODO: Pass new `LifecycleTask(this)` here once implemented.
-                task: { processBucketEntry: (rules, result, done) => done() },
+                task: new LifecycleTask(this),
                 rules: config.Rules,
                 value: result,
+                s3target: s3,
             }, cb);
         });
     }
@@ -256,6 +297,19 @@ class LifecycleProducer {
         });
         consumer.on('error', () => {});
         consumer.subscribe();
+    }
+
+    _setupZookeeperClient(cb) {
+        this._zkClient = zookeeperHelper.createClient(
+            this._zkConfig.connectionString);
+        this._zkClient.connect();
+        this._zkClient.once('error', cb);
+        this._zkClient.once('ready', () => {
+            // just in case there would be more 'error' events
+            // emitted
+            this._zkClient.removeAllListeners('error');
+            cb();
+        });
     }
 
     /**
@@ -371,6 +425,7 @@ class LifecycleProducer {
                     this._objectProducer = producer;
                     return next();
                 }),
+            next => this._setupZookeeperClient(next),
         ], err => {
             if (err) {
                 this._log.error('error setting up kafka clients', {
