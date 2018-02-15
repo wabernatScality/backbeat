@@ -52,18 +52,7 @@ class ReplicationQueuePopulator extends QueuePopulatorExtension {
                      `${queueEntry.getBucket()}/${queueEntry.getObjectKey()}`,
                      JSON.stringify(entry));
 
-        if (queueEntry.getReducedLocations) {
-            const locations = queueEntry.getReducedLocations();
-            const bytes = locations.reduce((sum, item) => sum + item.size, 0);
-
-            this._incrementMetrics(entry.bucket, bytes);
-        } else {
-            this.log.error('queue entry has no functions getReducedLocations', {
-                method: 'ReplicationQueuePopulator.filter',
-                key: entry.key,
-                bucket: entry.bucket,
-            });
-        }
+        this._incrementMetrics(entry.bucket, queueEntry.getBytesMetric());
     }
 }
 
