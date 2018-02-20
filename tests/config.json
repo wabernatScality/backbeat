@@ -17,6 +17,13 @@
             "logName": "s3-recordlog"
         }
     },
+    "s3": {
+        "host": "127.0.0.1",
+        "port": 8000,
+        "transport": "http",
+        "accessKey": "accessKey1",
+        "secretKey": "verySecretKey1"
+    },
     "extensions": {
         "replication": {
             "topic": "backbeat-test-replication",
@@ -29,7 +36,7 @@
         "dumpLevel": "error"
     },
     "metrics": {
-        "topic": "backbeat-metrics"
+        "topic": "backbeat-test-metrics"
     },
     "server": {
         "healthChecks": {
@@ -37,5 +44,9 @@
         },
         "host": "127.0.0.1",
         "port": 8900
+    },
+    "redis": {
+        "name": "backbeat-test",
+        "password": ""
     }
 }

@@ -47,15 +47,8 @@ class Config {
                 }
             });
         }
-
-        const healthChecks = config.server.healthChecks.allowFrom;
-        if (healthChecks && healthChecks.length === 0) {
-            this.healthChecks = { allowFrom: ['127.0.0.1/8', '::1'] };
-        }
-
-        // TODO: Drop this before merge
         // default to standalone configuration if sentinel not setup
-        if (config.redis && !config.redis.sentinels) {
+        if (parsedConfig.redis && !parsedConfig.redis.sentinels) {
             this.redis = { host: '127.0.0.1', port: 6379 };
         }
 

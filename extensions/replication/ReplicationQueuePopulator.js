@@ -8,7 +8,7 @@ const ObjectQueueEntry = require('./utils/ObjectQueueEntry');
 class ReplicationQueuePopulator extends QueuePopulatorExtension {
     constructor(params) {
         super(params);
-        this.repConfig = params.config;
+        this.repConfig = params.extConfig;
     }
 
     filter(entry) {
@@ -51,6 +51,8 @@ class ReplicationQueuePopulator extends QueuePopulatorExtension {
         this.publish(this.repConfig.topic,
                      `${queueEntry.getBucket()}/${queueEntry.getObjectKey()}`,
                      JSON.stringify(entry));
+
+        this._incrementMetrics(entry.bucket, queueEntry.getBytesMetric());
     }
 }
 
