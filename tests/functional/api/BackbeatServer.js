@@ -14,16 +14,6 @@ function getUrl(options, path) {
 }
 
 describe('Backbeat Server', () => {
-    it('should get a response', done => {
-        const url = getUrl(defaultOptions, '/');
-
-        http.get(url, res => {
-            assert(res.statusCode);
-            assert(res.constructor.name === 'IncomingMessage');
-            return done();
-        });
-    });
-
     describe('healthcheck route', () => {
         let data;
         let resCode;
