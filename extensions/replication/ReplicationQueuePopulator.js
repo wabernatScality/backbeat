@@ -8,7 +8,7 @@ const ObjectQueueEntry = require('./utils/ObjectQueueEntry');
 class ReplicationQueuePopulator extends QueuePopulatorExtension {
     constructor(params) {
         super(params);
-        this.repConfig = params.extConfig;
+        this.repConfig = params.config;
     }
 
     filter(entry) {
