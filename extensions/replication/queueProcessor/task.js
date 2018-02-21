@@ -36,6 +36,6 @@ metricsProducer.setupProducer(err => {
         return undefined;
     }
     const queueProcessor = new QueueProcessor(zkConfig, sourceConfig,
-        destConfig, repConfig, metricsProducer);
+        destConfig, repConfig, site, metricsProducer);
     return queueProcessor.start();
 });
