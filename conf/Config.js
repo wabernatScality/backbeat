@@ -47,19 +47,21 @@ class Config {
                 }
             });
         }
+
+        // config is validated, safe to assign directly to the config object
+        Object.assign(this, parsedConfig);
+
         // default to standalone configuration if sentinel not setup
         if (parsedConfig.redis && !parsedConfig.redis.sentinels) {
             this.redis = { host: '127.0.0.1', port: 6379 };
         }
+
         // whitelist IP, CIDR for health checks
         this.healthChecks = { allowFrom: ['127.0.0.1/8', '::1'] };
         const allowedHealthChecks = parsedConfig.server.healthChecks.allowFrom;
         if (allowedHealthChecks) {
             this.healthChecks.allowFrom.concat(allowedHealthChecks);
         }
-
-        // config is validated, safe to assign directly to the config object
-        Object.assign(this, parsedConfig);
     }
 
     getBasePath() {
