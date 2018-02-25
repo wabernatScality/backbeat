@@ -29,6 +29,9 @@
             "topic": "backbeat-test-replication",
             "replicationStatusTopic": "backbeat-test-replication-status",
             "groupId": "backbeat-test-replication-group"
+        },
+        "lifecycle": {
+            "zookeeperPath": "/backbeat/test/lifecycle"
         }
     },
     "log": {

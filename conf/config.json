@@ -34,6 +34,9 @@
         }
     },
     "extensions": {
+        "lifecycle": {
+            "zookeeperPath": "/lifecycle"
+        },
         "replication": {
             "source": {
                 "transport": "http",
