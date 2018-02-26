@@ -58,11 +58,17 @@ class Config {
         }
 
         // whitelist IP, CIDR for health checks
-        this.healthChecks = { allowFrom: ['127.0.0.1/8', '::1'] };
-        const allowedHealthChecks = parsedConfig.server.healthChecks.allowFrom;
-        if (allowedHealthChecks) {
-            this.healthChecks.allowFrom.concat(allowedHealthChecks);
+        const defaultHealthChecks = ['127.0.0.1/8', '::1'];
+        const healthChecks = parsedConfig.server.healthChecks;
+        if (healthChecks.allowFrom.length > 0) {
+            healthChecks.allowFrom =
+                healthChecks.allowFrom.concat(defaultHealthChecks);
+        } else {
+            healthChecks.allowFrom = defaultHealthChecks;
         }
+
+        // config is validated, safe to assign directly to the config object
+        Object.assign(this, parsedConfig);
     }
 
     getBasePath() {
