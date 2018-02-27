@@ -65,7 +65,7 @@ class LifecycleObjectTask extends BackbeatTask {
         const details = entry.details;
         const reqParams = { Bucket: bucket, Key: key };
         if (version !== undefined) {
-            reqParams.Version = version;
+            reqParams.VersionId = version;
         }
         let reqMethod;
 
