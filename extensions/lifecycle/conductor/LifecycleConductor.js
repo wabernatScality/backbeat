@@ -8,6 +8,8 @@ const Logger = require('werelogs').Logger;
 
 const BackbeatProducer = require('../../../lib/BackbeatProducer');
 const zookeeperHelper = require('../../../lib/clients/zookeeper');
+const ProvisionDispatcher =
+          require('../../../lib/provisioning/ProvisionDispatcher');
 
 const DEFAULT_CRON_RULE = '* * * * *';
 const DEFAULT_CONCURRENCY = 10;
@@ -45,6 +47,9 @@ class LifecycleConductor {
             this.lcConfig.conductor.concurrency || DEFAULT_CONCURRENCY;
         this._producer = null;
         this._zkClient = null;
+        this._started = false;
+        this._isActive = false;
+        this._jobDispatcher = null;
         this._cronJob = null;
 
         this.logger = new Logger('Backbeat:Lifecycle:Conductor');
@@ -54,12 +59,12 @@ class LifecycleConductor {
         return `${this.lcConfig.zookeeperPath}/data/buckets`;
     }
 
-    getQueuedBucketsZkPath() {
-        return `${this.lcConfig.zookeeperPath}/run/queuedBuckets`;
+    getJobDispatcherZkPath() {
+        return `${this.lcConfig.zookeeperPath}/data/conductor-job-dispatcher`;
     }
 
-    getConductorLockZkPath() {
-        return `${this.lcConfig.zookeeperPath}/run/conductorLock`;
+    getQueuedBucketsZkPath() {
+        return `${this.lcConfig.zookeeperPath}/run/queuedBuckets`;
     }
 
     initZkPaths(cb) {
@@ -105,31 +110,9 @@ class LifecycleConductor {
     }
 
     processBuckets() {
-        const zkLockPath = this.getConductorLockZkPath();
+        this.logger.info('starting queue-buckets job');
         const zkBucketsPath = this.getBucketsZkPath();
-        let lockHeld = false;
         async.waterfall([
-            next => this._zkClient.create(
-                zkLockPath,
-                null,
-                zookeeper.ACL.OPEN_ACL_UNSAFE,
-                zookeeper.CreateMode.EPHEMERAL,
-                err => {
-                    if (err) {
-                        if (err.getCode() ===
-                            zookeeper.Exception.NODE_EXISTS) {
-                            this.logger.debug(
-                                'bucket processing in progress, skipping');
-                        } else {
-                            this.logger.error(
-                                'error creating conductor lock on zookeeper',
-                                { zkPath: zkLockPath, error: err.message });
-                        }
-                    } else {
-                        lockHeld = true;
-                    }
-                    return next(err);
-                }),
             next => this._zkClient.getChildren(
                 zkBucketsPath,
                 null,
@@ -163,17 +146,7 @@ class LifecycleConductor {
                 }
                 return this._producer.send(entries, next);
             },
-        ], () => {
-            if (lockHeld) {
-                this._zkClient.remove(zkLockPath, -1, err => {
-                    if (err) {
-                        this.logger.error(
-                            'error removing conductor lock on zookeeper',
-                            { zkPath: zkLockPath, error: err.message });
-                    }
-                });
-            }
-        });
+        ], () => {});
     }
 
     /**
@@ -235,19 +208,53 @@ class LifecycleConductor {
      * @return {undefined}
      */
     start(done) {
-        if (this._cronJob) {
+        if (this._started) {
             // already started
             return process.nextTick(done);
         }
-        return async.series([
-            next => this.init(next),
-            next => {
-                this._cronJob = schedule.scheduleJob(
-                    this._cronRule,
-                    this.processBuckets.bind(this));
-                process.nextTick(next);
-            },
-        ], done);
+        this._started = true;
+        return this.init(err => {
+            if (err) {
+                return done(err);
+            }
+            this.logger.debug('connecting to job dispatcher');
+            const jobDispatcherZkPath = this.getJobDispatcherZkPath();
+            this._jobDispatcher = new ProvisionDispatcher({
+                connectionString:
+                `${this.zkConfig.connectionString}${jobDispatcherZkPath}`,
+            });
+            this._jobDispatcher.subscribe((err, items) => {
+                if (err) {
+                    this.logger.error('error during job provisioning',
+                                      { error: err.message });
+                    return undefined;
+                }
+                this._isActive = false;
+                items.forEach(job => {
+                    this.logger.info('conductor job provisioned',
+                                     { job });
+                    if (job === 'queue-buckets') {
+                        this._isActive = true;
+                    }
+                });
+                if (this._isActive && !this._cronJob) {
+                    this.logger.info('starting bucket queueing cron job',
+                                     { cronRule: this._cronRule });
+                    this._cronJob = schedule.scheduleJob(
+                        this._cronRule,
+                        this.processBuckets.bind(this));
+                } else if (!this._isActive && this._cronJob) {
+                    this.logger.info('stopping bucket queueing cron job');
+                    this._cronJob.cancel();
+                    this._cronJob = null;
+                }
+                if (!this._isActive) {
+                    this.logger.info('no active job provisioned, idling');
+                }
+                return undefined;
+            });
+            return done();
+        });
     }
 
     /**
@@ -259,16 +266,32 @@ class LifecycleConductor {
      */
     stop(done) {
         if (this._cronJob) {
+            this.logger.info('stopping bucket queueing cron job');
             this._cronJob.cancel();
             this._cronJob = null;
         }
-        if (!this._producer) {
-            return process.nextTick(done);
-        }
-        return this._producer.close(() => {
-            this._producer = null;
-            this._zkClient = null;
-            done();
+        async.series([
+            next => {
+                if (!this._jobDispatcher) {
+                    return process.nextTick(next);
+                }
+                this.logger.debug('unsubscribing to job dispatcher');
+                return this._jobDispatcher.unsubscribe(next);
+            },
+            next => {
+                if (!this._producer) {
+                    return process.nextTick(next);
+                }
+                this.logger.debug('closing producer');
+                return this._producer.close(() => {
+                    this._producer = null;
+                    this._zkClient = null;
+                    next();
+                });
+            },
+        ], err => {
+            this._started = false;
+            return done(err);
         });
     }
 }
