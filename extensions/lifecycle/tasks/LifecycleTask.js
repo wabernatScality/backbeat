@@ -410,6 +410,9 @@ class LifecycleTask extends BackbeatTask {
                             bucket: bucketData.target.bucket,
                             key: obj.Key,
                         },
+                        details: {
+                            lastModified: data.LastModified,
+                        },
                     };
                     this.sendObjectEntry(entry, err => {
                         if (!err) {
@@ -429,6 +432,9 @@ class LifecycleTask extends BackbeatTask {
                             owner: bucketData.target.owner,
                             bucket: bucketData.target.bucket,
                             key: obj.Key,
+                        },
+                        details: {
+                            lastModified: data.LastModified,
                         },
                     };
                     this.sendObjectEntry(entry, err => {
