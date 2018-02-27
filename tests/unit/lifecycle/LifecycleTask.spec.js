@@ -37,7 +37,7 @@ describe('lifecycle task helper methods', () => {
         lct = new LifecycleTask(lp);
     });
 
-    describe('_filterRules for listObjectsV2 contents',
+    describe('_filterRules for listObjects contents',
     () => {
         it('should filter out Status disabled rules', () => {
             const mBucketRules = [
@@ -229,6 +229,43 @@ describe('lifecycle task helper methods', () => {
                 res.AbortIncompleteMultipartUpload.DaysAfterInitiation, 4);
             assert.strictEqual(
                 res.NoncurrentVersionExpiration.NoncurrentDays, 3);
+        });
+    });
+
+    describe('_filterRules & _getApplicableRules', () => {
+        it('should match rules', () => {
+            const mBucketRules = [
+                new Rule().addID('task-1').addPrefix('expireat/')
+                    .addExpiration('Date', PAST).build(),
+                new Rule().addID('task-2').addPrefix('expireafter/')
+                    .addExpiration('Days', 1).build(),
+                new Rule().addID('task-3').addPrefix('expirenoncurrent/')
+                    .addNCVExpiration(10).build(),
+                new Rule().addID('task-4').addPrefix('expirenoncurrent/')
+                    .addNCVExpiration(2).build(),
+                new Rule().addID('task-5').addPrefix('expirenoncurrent/')
+                    .addNCVExpiration(5).build(),
+                new Rule().addID('task-6').addPrefix('expireat/')
+                    .addNCVExpiration(1).build(),
+            ];
+            const item = {
+                Key: 'expirenoncurrent/obj1',
+                LastModified: FUTURE,
+                IsLatest: false,
+                Size: 0,
+                VersionId: '393834383031393739343533353039393939393952473030' +
+                    '312020312e343936322e31',
+            };
+            const objTags = { TagSet: [] };
+
+            const filteredRules = lct._filterRules(mBucketRules, item, objTags);
+            assert.strictEqual(filteredRules.length, 3);
+            assert.deepStrictEqual(getRuleIDs(filteredRules),
+                ['task-3', 'task-4', 'task-5']);
+
+            const res = lct._getApplicableRules(filteredRules);
+            assert.deepStrictEqual(res.NoncurrentVersionExpiration,
+                { NoncurrentDays: 2 });
         });
     });
 });
