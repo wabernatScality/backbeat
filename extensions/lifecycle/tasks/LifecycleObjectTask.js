@@ -59,6 +59,23 @@ class LifecycleObjectTask extends BackbeatTask {
         });
     }
 
+    _checkDate(entry, log, done) {
+        const { bucket, key } = entry.target;
+        const lastModified = entry.details.lastModified;
+
+        if (lastModified) {
+            const reqParams = {
+                Bucket: bucket,
+                Key: key,
+                IfUnmodifiedSince: lastModified,
+            };
+            const req = this.s3Client.headObject(reqParams);
+            attachReqUids(req, log);
+            return req.send(err => done(err));
+        }
+        return done();
+    }
+
     _executeAction(entry, log, done) {
         const action = entry.action;
         const { bucket, key, version } = entry.target;
@@ -110,10 +127,17 @@ class LifecycleObjectTask extends BackbeatTask {
         // entries are small, we can log them directly
         log.debug('processing lifecycle object entry', { entry });
 
-        async.series([next => this._setupClients(entry.target.owner, log,
-                                                 next),
-                      next => this._executeAction(entry, log, next),
-                     ], done);
+        async.series([
+            next => this._setupClients(entry.target.owner, log, next),
+            next => this._checkDate(entry, log, next),
+            next => this._executeAction(entry, log, next),
+        ], err => {
+            if (err.statusCode === 412) {
+                log.info('Object was modified after delete entry created so ' +
+                    'object was not deleted', { entry });
+            }
+            done();
+        });
     }
 }
 
