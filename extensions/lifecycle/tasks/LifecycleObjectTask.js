@@ -61,7 +61,7 @@ class LifecycleObjectTask extends BackbeatTask {
 
     _checkDate(entry, log, done) {
         const { bucket, key } = entry.target;
-        const lastModified = entry.details.lastModified;
+        const { lastModified } = entry.details || {};
 
         if (lastModified) {
             const reqParams = {
@@ -71,7 +71,7 @@ class LifecycleObjectTask extends BackbeatTask {
             };
             const req = this.s3Client.headObject(reqParams);
             attachReqUids(req, log);
-            return req.send(err => done(err));
+            return req.send(done);
         }
         return done();
     }
