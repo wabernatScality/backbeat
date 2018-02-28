@@ -47,6 +47,11 @@ class Config {
                 }
             });
         }
+        // whitelist IP, CIDR for health checks
+        const defaultHealthChecks = ['127.0.0.1/8', '::1'];
+        const healthChecks = parsedConfig.server.healthChecks;
+        healthChecks.allowFrom =
+            healthChecks.allowFrom.concat(defaultHealthChecks);
 
         // config is validated, safe to assign directly to the config object
         Object.assign(this, parsedConfig);
@@ -56,19 +61,6 @@ class Config {
             this.redis = Object.assign({}, parsedConfig.redis,
                 { host: '127.0.0.1', port: 6379 });
         }
-
-        // whitelist IP, CIDR for health checks
-        const defaultHealthChecks = ['127.0.0.1/8', '::1'];
-        const healthChecks = parsedConfig.server.healthChecks;
-        if (healthChecks.allowFrom.length > 0) {
-            healthChecks.allowFrom =
-                healthChecks.allowFrom.concat(defaultHealthChecks);
-        } else {
-            healthChecks.allowFrom = defaultHealthChecks;
-        }
-
-        // config is validated, safe to assign directly to the config object
-        Object.assign(this, parsedConfig);
     }
 
     getBasePath() {
