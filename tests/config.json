@@ -5,7 +5,6 @@
     },
     "kafka": {
         "hosts": "127.0.0.1:9092"
-<<<<<<< HEAD
     },
     "s3": {
         "host": "127.0.0.1",
@@ -23,8 +22,6 @@
             "adminPort": 8600,
             "adminCredentialsFile": "../conf/authdata.json"
         }
-=======
->>>>>>> 3cda54adb75e91f11fbcfa1baaada767ff2ffb1e
     },
     "queuePopulator": {
         "cronRule": "*/5 * * * * *",
@@ -36,13 +33,6 @@
             "port": 9990,
             "logName": "s3-recordlog"
         }
-    },
-    "s3": {
-        "host": "127.0.0.1",
-        "port": 8000,
-        "transport": "http",
-        "accessKey": "accessKey1",
-        "secretKey": "verySecretKey1"
     },
     "extensions": {
         "replication": {
