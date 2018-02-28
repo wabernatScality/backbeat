@@ -76,7 +76,11 @@ class LifecycleObjectTask extends BackbeatTask {
         return done();
     }
 
-    _executeAction(entry, log, done) {
+    getQueuedBucketsZkPath() {
+        return `${this.lcConfig.zookeeperPath}/run/queuedBuckets`;
+    }
+
+    _executeDelete(entry, log, done) {
         const action = entry.action;
         const { bucket, key, version } = entry.target;
         const details = entry.details;
@@ -92,21 +96,32 @@ class LifecycleObjectTask extends BackbeatTask {
             reqParams.UploadId = details.UploadId;
             reqMethod = 'abortMultipartUpload';
         }
-        if (!reqMethod) {
-            log.error(`skipped unsupported action ${action}`,
-                      { entry });
-            return done();
-        }
         const req = this.s3Client[reqMethod](reqParams);
         attachReqUids(req, log);
         return req.send(err => {
             if (err) {
                 log.error(`an error occurred on ${reqMethod} to S3`,
-                    { method: 'LifecycleObjectTask._executeAction',
+                    { method: 'LifecycleObjectTask._executeDelete',
                         error: err.message,
                         httpStatus: err.statusCode });
                 return done(err);
             }
+            return done();
+        });
+    }
+
+    _executeUnlockBucket(entry, log, done) {
+        const { owner, bucket } = entry.target;
+
+        const zkPath = `${this.getQueuedBucketsZkPath()}/${owner}:${bucket}`;
+        this.zkClient.remove(zkPath, -1, err => {
+            if (err) {
+                log.error('could not remove queued bucket node from zookeeper',
+                          { owner, bucket, zkPath, error: err.message });
+                return done(err);
+            }
+            log.debug('removed queued bucket node from zookeeper',
+                      { owner, bucket, zkPath });
             return done();
         });
     }
@@ -127,17 +142,32 @@ class LifecycleObjectTask extends BackbeatTask {
         // entries are small, we can log them directly
         log.debug('processing lifecycle object entry', { entry });
 
-        async.series([
-            next => this._setupClients(entry.target.owner, log, next),
-            next => this._checkDate(entry, log, next),
-            next => this._executeAction(entry, log, next),
-        ], err => {
-            if (err.statusCode === 412) {
-                log.info('Object was modified after delete entry created so ' +
-                    'object was not deleted', { entry });
-            }
-            done();
-        });
+        if (!entry.target) {
+            log.error('missing "target" in object queue entry',
+                      { entry });
+            return process.nextTick(done);
+        }
+        const action = entry.action;
+        if (action === 'deleteObject' ||
+            action === 'deleteMPU') {
+            return async.series([
+                next => this._setupClients(entry.target.owner, log, next),
+                next => this._checkDate(entry, log, next),
+                next => this._executeAction(entry, log, next),
+            ], err => {
+                if (err && err.statusCode === 412) {
+                    log.info('Object was modified after delete entry ' +
+                             'created so object was not deleted',
+                             { entry });
+                }
+                return done(err);
+            });
+        }
+        if (action === 'unlockBucket') {
+            return this._executeUnlockBucket(entry, log, done);
+        }
+        log.info(`skipped unsupported action ${action}`, { entry });
+        return process.nextTick(done);
     }
 }
 

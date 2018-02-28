@@ -7,6 +7,7 @@ const { errors } = require('arsenal');
 
 const LifecycleObjectTask = require('../tasks/LifecycleObjectTask');
 const BackbeatConsumer = require('../../../lib/BackbeatConsumer');
+const zookeeperHelper = require('../../../lib/clients/zookeeper');
 
 class LifecycleConsumer extends EventEmitter {
 
@@ -42,6 +43,7 @@ class LifecycleConsumer extends EventEmitter {
         this.authConfig = authConfig;
         this._transport = transport;
         this._consumer = null;
+        this._zkClient = null;
 
         this.logger = new Logger('Backbeat:Lifecycle:ObjectConsumer');
 
@@ -50,6 +52,19 @@ class LifecycleConsumer extends EventEmitter {
         this.httpAgent = new http.Agent({ keepAlive: true });
     }
 
+
+    _setupZookeeperClient(cb) {
+        this._zkClient = zookeeperHelper.createClient(
+            this.zkConfig.connectionString);
+        this._zkClient.connect();
+        this._zkClient.once('error', cb);
+        this._zkClient.once('ready', () => {
+            // just in case there would be more 'error' events
+            // emitted
+            this._zkClient.removeAllListeners('error');
+            cb();
+        });
+    }
 
     /**
      * Start kafka consumer. Emits a 'ready' event when
@@ -69,8 +84,10 @@ class LifecycleConsumer extends EventEmitter {
         });
         this._consumer.on('error', () => {});
         this._consumer.subscribe();
-        this.logger.info('lifecycle consumer successfully started');
-        return this.emit('ready');
+        this._setupZookeeperClient(() => {
+            this.logger.info('lifecycle consumer successfully started');
+            return this.emit('ready');
+        });
     }
 
 
@@ -104,6 +121,7 @@ class LifecycleConsumer extends EventEmitter {
             authConfig: this.authConfig,
             transport: this._transport,
             httpAgent: this.httpAgent,
+            zkClient: this._zkClient,
             logger: this.logger,
         };
     }
