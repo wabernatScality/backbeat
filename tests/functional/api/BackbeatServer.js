@@ -1,6 +1,7 @@
 const assert = require('assert');
 const http = require('http');
 const Redis = require('ioredis');
+const { Client, Producer } = require('kafka-node');
 
 const { RedisClient, StatsClient } = require('arsenal').metrics;
 
@@ -25,45 +26,49 @@ function getUrl(options, path) {
     return `http://${options.host}:${options.port}${path}`;
 }
 
-function getRequest(path) {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            const params = {
-                host: '127.0.0.1',
-                port: 8900,
-                method: 'GET',
-                path,
-            };
-            // eslint-disable-next-line
-            const req = http.request(params, res => {
-                if (res.statusCode !== 200) {
-                    return reject('Failed to get request. Status code: ' +
-                        `${res.statusCode}`);
-                }
-                assert.equal(res.statusCode, 200);
+function getRequest(path, done) {
+    const params = {
+        host: '127.0.0.1',
+        port: 8900,
+        method: 'GET',
+        path,
+    };
+    // eslint-disable-next-line
+    const req = http.request(params, res => {
+        if (res.statusCode !== 200) {
+            return done(res);
+        }
 
-                const chunks = [];
-                res.on('data', chunk => {
-                    chunks.push(chunk);
-                });
-                res.on('end', () => {
-                    let body;
-                    try {
-                        body = JSON.parse(Buffer.concat(chunks).toString());
-                    } catch (e) {
-                        return reject(e);
-                    }
-                    return resolve(body);
-                });
-            });
-
-            req.on('error', err => reject(err));
-            req.end();
-        }, 2000);
+        const chunks = [];
+        res.on('data', chunk => {
+            chunks.push(chunk);
+        });
+        res.on('end', () => {
+            let body;
+            try {
+                body = JSON.parse(Buffer.concat(chunks).toString());
+            } catch (e) {
+                return done(e);
+            }
+            return done(null, body);
+        });
     });
+    req.on('error', err => done(err));
+    req.end();
 }
 
 describe('Backbeat Server', () => {
+    before(done => {
+        const kafkaClient = new Client(config.zookeeper.connectionString,
+            'TestClient');
+        const testProducer = new Producer(kafkaClient);
+        testProducer.createTopics([
+            config.extensions.replication.topic,
+            config.extensions.replication.replicationStatusTopic,
+        ], false, () => {});
+        done();
+    });
+
     describe('healthcheck route', () => {
         let data;
         let resCode;
@@ -124,6 +129,10 @@ describe('Backbeat Server', () => {
         const OPS_DONE = 'test:bb:opsdone';
         const BYTES_DONE = 'test:bb:bytesdone';
 
+        const destconfig = config.extensions.replication.destination;
+        const site1 = destconfig.bootstrapList[0].site;
+        const site2 = destconfig.bootstrapList[1].site;
+
         let redisClient;
         let statsClient;
         let redis;
@@ -132,10 +141,21 @@ describe('Backbeat Server', () => {
             redis = new Redis();
             redisClient = new RedisClient(redisConfig, fakeLogger);
             statsClient = new StatsClient(redisClient, interval, expiry);
+
+            statsClient.reportNewRequest(`${OPS}:${site1}`, 1725);
+            statsClient.reportNewRequest(`${BYTES}:${site1}`, 219800);
+            statsClient.reportNewRequest(`${OPS_DONE}:${site1}`, 450);
+            statsClient.reportNewRequest(`${BYTES_DONE}:${site1}`, 102700);
+
+            statsClient.reportNewRequest(`${OPS}:${site2}`, 900);
+            statsClient.reportNewRequest(`${BYTES}:${site2}`, 294300);
+            statsClient.reportNewRequest(`${OPS_DONE}:${site2}`, 300);
+            statsClient.reportNewRequest(`${BYTES_DONE}:${site2}`, 187400);
+
             done();
         });
 
-        afterEach(() => {
+        after(() => {
             redis.keys('test:bb:*').then(keys => {
                 const pipeline = redis.pipeline();
                 keys.forEach(key => {
@@ -158,8 +178,9 @@ describe('Backbeat Server', () => {
                 });
 
                 it(`should get correct data keys for route: ${route.path}`,
-                () => {
-                    getRequest(route.path).then(res => {
+                done => {
+                    getRequest(route.path, (err, res) => {
+                        assert.ifError(err);
                         const key = Object.keys(res)[0];
                         assert(res[key].description);
                         assert.equal(typeof res[key].description, 'string');
@@ -167,52 +188,131 @@ describe('Backbeat Server', () => {
                         assert(res[key].results);
                         assert.deepEqual(Object.keys(res[key].results),
                             ['count', 'size']);
-                    }).catch(rej => {
-                        assert.equal(rej, undefined);
+                        done();
                     });
                 });
             }
         });
 
-        it('should get the right data for route: /_/metrics/backlog',
-        () => {
-            statsClient.reportNewRequest(OPS, 5);
-            statsClient.reportNewRequest(BYTES, 7100);
+        it('should return an error for unknown site given', done => {
+            getRequest('/_/metrics/backlog/wrong-site', err => {
+                assert.equal(err.statusCode, 404);
+                assert.equal(err.statusMessage, 'Not Found');
+                done();
+            });
+        });
 
-            getRequest('/_/metrics/backlog').then(res => {
+        it(`should get the right data for route: /_/metrics/backlog/${site1}`,
+        done => {
+            getRequest(`/_/metrics/backlog/${site1}`, (err, res) => {
+                assert.ifError(err);
                 const key = Object.keys(res)[0];
-                assert.equal(res[key].results.count, 5);
-                assert.equal(res[key].results.size, 7.10);
-            }).catch(rej => {
-                assert.equal(rej, undefined);
+                assert.equal(res[key].results.count, 1275);
+                assert.equal(res[key].results.size, 117.1);
+                done();
+            });
+        });
+
+        it('should get the right data for route: /_/metrics/backlog', done => {
+            getRequest('/_/metrics/backlog', (err, res) => {
+                assert.ifError(err);
+                const key = Object.keys(res)[0];
+                assert.equal(res[key].results.count, 1875);
+                assert.equal(res[key].results.size, 224);
+                done();
             });
         });
 
         it('should get the right data for route: /_/metrics/completions',
-        () => {
-            statsClient.reportNewRequest(OPS_DONE, 12);
-            statsClient.reportNewRequest(BYTES_DONE, 1970);
-
-            getRequest('/_/metrics/completions').then(res => {
+        done => {
+            getRequest('/_/metrics/completions', (err, res) => {
+                assert.ifError(err);
                 const key = Object.keys(res)[0];
-                assert.equal(res[key].results.count, 12);
-                assert.equal(res[key].results.size, 1.97);
-            }).catch(rej => {
-                assert.equal(rej, undefined);
+                assert.equal(res[key].results.count, 750);
+                assert.equal(res[key].results.size, 290.1);
+                done();
+            });
+        });
+
+        it('should get the right data for route: ' +
+        `/_/metrics/completions/${site1}`, done => {
+            getRequest(`/_/metrics/completions/${site1}`, (err, res) => {
+                assert.ifError(err);
+                const key = Object.keys(res)[0];
+                assert.equal(res[key].results.count, 450);
+                assert.equal(res[key].results.size, 102.7);
+                done();
             });
         });
 
         it('should get the right data for route: /_/metrics/throughput',
-        () => {
-            statsClient.reportNewRequest(OPS_DONE, 300);
-            statsClient.reportNewRequest(BYTES_DONE, 187400);
-
-            getRequest('/_/metrics/throughput').then(res => {
+        done => {
+            getRequest('/_/metrics/throughput', (err, res) => {
+                assert.ifError(err);
                 const key = Object.keys(res)[0];
-                assert.equal(res[key].results.count, 0.33);
-                assert.equal(res[key].results.size, 0.21);
-            }).catch(rej => {
-                assert.equal(rej, undefined);
+                assert.equal(res[key].results.count, 0.83);
+                assert.equal(res[key].results.size, 0.32);
+                done();
+            });
+        });
+
+        it('should get the right data for route: ' +
+        `/_/metrics/throughput/${site1}`, done => {
+            getRequest(`/_/metrics/throughput/${site1}`, (err, res) => {
+                assert.ifError(err);
+                const key = Object.keys(res)[0];
+                assert.equal(res[key].results.count, 0.5);
+                assert.equal(res[key].results.size, 0.11);
+                done();
+            });
+        });
+
+        it('should return all metrics for route: /_/metrics', done => {
+            getRequest('/_/metrics', (err, res) => {
+                assert.ifError(err);
+                const keys = Object.keys(res);
+                assert(keys.includes('backlog'));
+                assert(keys.includes('completions'));
+                assert(keys.includes('throughput'));
+
+                assert(res.backlog.description);
+                assert.equal(res.backlog.results.count, 1875);
+                assert.equal(res.backlog.results.size, 224);
+
+                assert(res.completions.description);
+                assert.equal(res.completions.results.count, 750);
+                assert.equal(res.completions.results.size, 290.1);
+
+                assert(res.throughput.description);
+                assert.equal(res.throughput.results.count, 0.83);
+                assert.equal(res.throughput.results.size, 0.32);
+
+                done();
+            });
+        });
+
+        it(`should return all metrics for route: /_/metrics/${site1}`,
+        done => {
+            getRequest(`/_/metrics/${site1}`, (err, res) => {
+                assert.ifError(err);
+                const keys = Object.keys(res);
+                assert(keys.includes('backlog'));
+                assert(keys.includes('completions'));
+                assert(keys.includes('throughput'));
+
+                assert(res.backlog.description);
+                assert.equal(res.backlog.results.count, 1275);
+                assert.equal(res.backlog.results.size, 117.1);
+
+                assert(res.completions.description);
+                assert.equal(res.completions.results.count, 450);
+                assert.equal(res.completions.results.size, 102.7);
+
+                assert(res.throughput.description);
+                assert.equal(res.throughput.results.count, 0.5);
+                assert.equal(res.throughput.results.size, 0.11);
+
+                done();
             });
         });
     });

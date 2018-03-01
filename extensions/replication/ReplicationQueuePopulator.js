@@ -1,3 +1,5 @@
+const uuid = require('uuid/v4');
+
 const { isMasterKey } = require('arsenal/lib/versioning/Version');
 const { usersBucket, mpuBucketPrefix } = require('arsenal').constants;
 
@@ -56,7 +58,25 @@ class ReplicationQueuePopulator extends QueuePopulatorExtension {
                      `${queueEntry.getBucket()}/${queueEntry.getObjectKey()}`,
                      JSON.stringify(entry));
 
-        this._incrementMetrics(entry.bucket, queueEntry.getBytesMetric());
+        // Populate metric using site || storageClass (name of custom site)
+        const repInfo = value.replicationInfo;
+        let site;
+        if (repInfo.storageType) {
+            // known external cloud (i.e. aws_s3 || azure)
+            site = repInfo.storageType;
+        } else if (repInfo.storageClass) {
+            site = repInfo.storageClass;
+        } else {
+            const id = uuid().replace(/-/g, '');
+            site = `bb-unknown-type-${id}`;
+
+            this.log.debug('unknown metric type has been processed', {
+                method: 'ReplicationQueuePopulator._filterVersionedKey',
+                id,
+            });
+        }
+
+        this._incrementMetrics(site, queueEntry.getBytesMetric());
     }
 }
 
