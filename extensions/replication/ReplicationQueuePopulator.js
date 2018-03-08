@@ -1,5 +1,3 @@
-const uuid = require('uuid/v4');
-
 const { isMasterKey } = require('arsenal/lib/versioning/Version');
 const { usersBucket, mpuBucketPrefix } = require('arsenal').constants;
 
@@ -67,12 +65,11 @@ class ReplicationQueuePopulator extends QueuePopulatorExtension {
         } else if (repInfo.storageClass) {
             site = repInfo.storageClass;
         } else {
-            const id = uuid().replace(/-/g, '');
-            site = `bb-unknown-type-${id}`;
+            site = 'bb-unknown-type';
 
             this.log.debug('unknown metric type has been processed', {
                 method: 'ReplicationQueuePopulator._filterVersionedKey',
-                id,
+                entry: queueEntry.getLogInfo(),
             });
         }
 
