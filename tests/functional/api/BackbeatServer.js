@@ -2,9 +2,11 @@ const assert = require('assert');
 const http = require('http');
 const Redis = require('ioredis');
 const { Client, Producer } = require('kafka-node');
+const util = require('util');
 
-const { RedisClient, StatsClient } = require('arsenal').metrics;
+const { RedisClient } = require('arsenal').metrics;
 
+const StatsModel = require('../../../lib/models/StatsModel');
 const config = require('../../config.json');
 const allRoutes = require('../../../lib/api/routes');
 const redisConfig = { host: '127.0.0.1', port: 6379 };
@@ -50,6 +52,8 @@ function getRequest(path, done) {
             } catch (e) {
                 return done(e);
             }
+            process.stdout.write(`http://${params.host}:${params.port}${path}`);
+            process.stdout.write(util.inspect(body));
             return done(null, body);
         });
     });
