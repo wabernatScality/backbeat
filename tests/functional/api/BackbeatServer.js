@@ -8,7 +8,6 @@ const { RedisClient } = require('arsenal').metrics;
 
 const StatsModel = require('../../../lib/models/StatsModel');
 const config = require('../../config.json');
-const allRoutes = require('../../../lib/api/routes');
 const redisConfig = { host: '127.0.0.1', port: 6379 };
 
 const fakeLogger = {
@@ -126,16 +125,17 @@ describe('Backbeat Server', () => {
     });
 
     describe('metrics routes', () => {
-        const interval = 100;
-        const expiry = 300;
+        const interval = 300;
+        const expiry = 900;
         const OPS = 'test:bb:ops';
         const BYTES = 'test:bb:bytes';
         const OPS_DONE = 'test:bb:opsdone';
         const BYTES_DONE = 'test:bb:bytesdone';
 
         const destconfig = config.extensions.replication.destination;
-        const site1 = destconfig.bootstrapList[0].site;
-        const site2 = destconfig.bootstrapList[1].site;
+        const blist = destconfig.bootstrapList;
+        const site1 = blist[0].type ? blist[0].type : blist[0].site;
+        const site2 = blist[1].type ? blist[1].type : blist[1].site;
 
         let redisClient;
         let statsClient;
@@ -160,7 +160,7 @@ describe('Backbeat Server', () => {
         });
 
         after(() => {
-            redis.keys('test:bb:*').then(keys => {
+            redis.keys('*:test:bb:*').then(keys => {
                 const pipeline = redis.pipeline();
                 keys.forEach(key => {
                     pipeline.del(key);
@@ -169,46 +169,60 @@ describe('Backbeat Server', () => {
             });
         });
 
-        allRoutes.forEach(route => {
-            if (route.path.indexOf('healthcheck') === -1) {
-                it(`should get a 200 response for route: ${route.path}`,
-                done => {
-                    const url = getUrl(defaultOptions, route.path);
+        // TODO: refactor this
+        const allPaths = [
+            `/_/metrics/crr/${site1}`,
+            `/_/metrics/crr/${site2}`,
+            '/_/metrics/crr/all',
+            `/_/metrics/crr/${site1}/backlog`,
+            `/_/metrics/crr/${site2}/backlog`,
+            '/_/metrics/crr/all/backlog',
+            `/_/metrics/crr/${site1}/completions`,
+            `/_/metrics/crr/${site2}/completions`,
+            '/_/metrics/crr/all/completions',
+            `/_/metrics/crr/${site1}/throughput`,
+            `/_/metrics/crr/${site2}/throughput`,
+            '/_/metrics/crr/all/throughput',
+        ];
 
-                    http.get(url, res => {
-                        assert.equal(res.statusCode, 200);
-                        done();
-                    });
+        allPaths.forEach(path => {
+            it(`should get a 200 response for route: ${path}`,
+            done => {
+                const url = getUrl(defaultOptions, path);
+
+                http.get(url, res => {
+                    assert.equal(res.statusCode, 200);
+                    done();
                 });
+            });
 
-                it(`should get correct data keys for route: ${route.path}`,
-                done => {
-                    getRequest(route.path, (err, res) => {
-                        assert.ifError(err);
-                        const key = Object.keys(res)[0];
-                        assert(res[key].description);
-                        assert.equal(typeof res[key].description, 'string');
+            it(`should get correct data keys for route: ${path}`,
+            done => {
+                getRequest(path, (err, res) => {
+                    assert.ifError(err);
+                    const key = Object.keys(res)[0];
+                    assert(res[key].description);
+                    assert.equal(typeof res[key].description, 'string');
 
-                        assert(res[key].results);
-                        assert.deepEqual(Object.keys(res[key].results),
-                            ['count', 'size']);
-                        done();
-                    });
+                    assert(res[key].results);
+                    assert.deepEqual(Object.keys(res[key].results),
+                        ['count', 'size']);
+                    done();
                 });
-            }
+            });
         });
 
         it('should return an error for unknown site given', done => {
-            getRequest('/_/metrics/backlog/wrong-site', err => {
+            getRequest('/_/metrics/crr/wrong-site/completions', err => {
                 assert.equal(err.statusCode, 404);
                 assert.equal(err.statusMessage, 'Not Found');
                 done();
             });
         });
 
-        it(`should get the right data for route: /_/metrics/backlog/${site1}`,
-        done => {
-            getRequest(`/_/metrics/backlog/${site1}`, (err, res) => {
+        it('should get the right data for route: ' +
+        `/_/metrics/crr/${site1}/backlog`, done => {
+            getRequest(`/_/metrics/crr/${site1}/backlog`, (err, res) => {
                 assert.ifError(err);
                 const key = Object.keys(res)[0];
                 assert.equal(res[key].results.count, 1275);
@@ -217,8 +231,9 @@ describe('Backbeat Server', () => {
             });
         });
 
-        it('should get the right data for route: /_/metrics/backlog', done => {
-            getRequest('/_/metrics/backlog', (err, res) => {
+        it('should get the right data for route: ' +
+        '/_/metrics/crr/all/backlog', done => {
+            getRequest('/_/metrics/crr/all/backlog', (err, res) => {
                 assert.ifError(err);
                 const key = Object.keys(res)[0];
                 assert.equal(res[key].results.count, 1875);
@@ -227,9 +242,9 @@ describe('Backbeat Server', () => {
             });
         });
 
-        it('should get the right data for route: /_/metrics/completions',
-        done => {
-            getRequest('/_/metrics/completions', (err, res) => {
+        it('should get the right data for route: ' +
+        '/_/metrics/crr/all/completions', done => {
+            getRequest('/_/metrics/crr/all/completions', (err, res) => {
                 assert.ifError(err);
                 const key = Object.keys(res)[0];
                 assert.equal(res[key].results.count, 750);
@@ -239,8 +254,8 @@ describe('Backbeat Server', () => {
         });
 
         it('should get the right data for route: ' +
-        `/_/metrics/completions/${site1}`, done => {
-            getRequest(`/_/metrics/completions/${site1}`, (err, res) => {
+        `/_/metrics/crr/${site1}/completions`, done => {
+            getRequest(`/_/metrics/crr/${site1}/completions`, (err, res) => {
                 assert.ifError(err);
                 const key = Object.keys(res)[0];
                 assert.equal(res[key].results.count, 450);
@@ -249,9 +264,9 @@ describe('Backbeat Server', () => {
             });
         });
 
-        it('should get the right data for route: /_/metrics/throughput',
-        done => {
-            getRequest('/_/metrics/throughput', (err, res) => {
+        it('should get the right data for route: ' +
+        '/_/metrics/crr/all/throughput', done => {
+            getRequest('/_/metrics/crr/all/throughput', (err, res) => {
                 assert.ifError(err);
                 const key = Object.keys(res)[0];
                 assert.equal(res[key].results.count, 0.83);
@@ -261,8 +276,8 @@ describe('Backbeat Server', () => {
         });
 
         it('should get the right data for route: ' +
-        `/_/metrics/throughput/${site1}`, done => {
-            getRequest(`/_/metrics/throughput/${site1}`, (err, res) => {
+        `/_/metrics/crr/${site1}/throughput`, done => {
+            getRequest(`/_/metrics/crr/${site1}/throughput`, (err, res) => {
                 assert.ifError(err);
                 const key = Object.keys(res)[0];
                 assert.equal(res[key].results.count, 0.5);
@@ -271,8 +286,9 @@ describe('Backbeat Server', () => {
             });
         });
 
-        it('should return all metrics for route: /_/metrics', done => {
-            getRequest('/_/metrics', (err, res) => {
+        it('should return all metrics for route: ' +
+        '/_/metrics/crr/all', done => {
+            getRequest('/_/metrics/crr/all', (err, res) => {
                 assert.ifError(err);
                 const keys = Object.keys(res);
                 assert(keys.includes('backlog'));
@@ -295,9 +311,9 @@ describe('Backbeat Server', () => {
             });
         });
 
-        it(`should return all metrics for route: /_/metrics/${site1}`,
-        done => {
-            getRequest(`/_/metrics/${site1}`, (err, res) => {
+        it(`should return all metrics for route: ' +
+        '/_/metrics/crr/${site1}`, done => {
+            getRequest(`/_/metrics/crr/${site1}`, (err, res) => {
                 assert.ifError(err);
                 const keys = Object.keys(res);
                 assert(keys.includes('backlog'));
