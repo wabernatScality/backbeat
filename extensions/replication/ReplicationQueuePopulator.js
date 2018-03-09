@@ -59,7 +59,11 @@ class ReplicationQueuePopulator extends QueuePopulatorExtension {
         const repSites = value.replicationInfo.backends;
         const sites = repSites.reduce((store, entry) => {
             if (entry.status === 'PENDING') {
-                store.push(entry.type || entry.site);
+                if (entry.site === 'awsbackend') {
+                    store.push('aws_s3');
+                } else {
+                    store.push(entry.site);
+                }
             }
             return store;
         }, []);
