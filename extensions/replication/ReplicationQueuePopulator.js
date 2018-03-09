@@ -56,7 +56,7 @@ class ReplicationQueuePopulator extends QueuePopulatorExtension {
                      `${queueEntry.getBucket()}/${queueEntry.getObjectKey()}`,
                      JSON.stringify(entry));
 
-        const repSites = value.replicationInfo.backends;
+        const repSites = queueEntry.getReplicationInfo().backends;
         const sites = repSites.reduce((store, entry) => {
             if (entry.status === 'PENDING') {
                 if (entry.site === 'awsbackend') {
