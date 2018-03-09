@@ -146,15 +146,15 @@ describe('Backbeat Server', () => {
             redisClient = new RedisClient(redisConfig, fakeLogger);
             statsClient = new StatsClient(redisClient, interval, expiry);
 
-            statsClient.reportNewRequest(`${OPS}:${site1}`, 1725);
-            statsClient.reportNewRequest(`${BYTES}:${site1}`, 219800);
-            statsClient.reportNewRequest(`${OPS_DONE}:${site1}`, 450);
-            statsClient.reportNewRequest(`${BYTES_DONE}:${site1}`, 102700);
+            statsClient.reportNewRequest(`${site1}:${OPS}`, 1725);
+            statsClient.reportNewRequest(`${site1}:${BYTES}`, 219800);
+            statsClient.reportNewRequest(`${site1}:${OPS_DONE}`, 450);
+            statsClient.reportNewRequest(`${site1}:${BYTES_DONE}`, 102700);
 
-            statsClient.reportNewRequest(`${OPS}:${site2}`, 900);
-            statsClient.reportNewRequest(`${BYTES}:${site2}`, 294300);
-            statsClient.reportNewRequest(`${OPS_DONE}:${site2}`, 300);
-            statsClient.reportNewRequest(`${BYTES_DONE}:${site2}`, 187400);
+            statsClient.reportNewRequest(`${site2}:${OPS}`, 900);
+            statsClient.reportNewRequest(`${site2}:${BYTES}`, 294300);
+            statsClient.reportNewRequest(`${site2}:${OPS_DONE}`, 300);
+            statsClient.reportNewRequest(`${site2}:${BYTES_DONE}`, 187400);
 
             done();
         });
