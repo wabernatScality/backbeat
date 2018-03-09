@@ -56,24 +56,18 @@ class ReplicationQueuePopulator extends QueuePopulatorExtension {
                      `${queueEntry.getBucket()}/${queueEntry.getObjectKey()}`,
                      JSON.stringify(entry));
 
-        // Populate metric using site || storageClass (name of custom site)
-        const repInfo = value.replicationInfo;
-        let site;
-        if (repInfo.storageType) {
-            // known external cloud (i.e. aws_s3 || azure)
-            site = repInfo.storageType;
-        } else if (repInfo.storageClass) {
-            site = repInfo.storageClass;
-        } else {
-            site = 'bb-unknown-type';
+        const repSites = value.replicationInfo.backends;
+        const sites = repSites.reduce((store, entry) => {
+            if (entry.status === 'PENDING') {
+                store.push(entry.type || entry.site);
+            }
+            return store;
+        }, []);
 
-            this.log.debug('unknown metric type has been processed', {
-                method: 'ReplicationQueuePopulator._filterVersionedKey',
-                entry: queueEntry.getLogInfo(),
-            });
-        }
-
-        this._incrementMetrics(site, queueEntry.getBytesMetric());
+        // for one-to-many
+        sites.forEach(site => {
+            this._incrementMetrics(site, queueEntry.getBytesMetric);
+        });
     }
 }
 
