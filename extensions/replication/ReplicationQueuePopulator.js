@@ -70,7 +70,7 @@ class ReplicationQueuePopulator extends QueuePopulatorExtension {
 
         // for one-to-many
         sites.forEach(site => {
-            this._incrementMetrics(site, queueEntry.getBytesMetric);
+            this._incrementMetrics(site, queueEntry.getBytesMetric());
         });
     }
 }
