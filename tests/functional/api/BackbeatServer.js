@@ -144,7 +144,7 @@ describe('Backbeat Server', () => {
         before(done => {
             redis = new Redis();
             redisClient = new RedisClient(redisConfig, fakeLogger);
-            statsClient = new StatsClient(redisClient, interval, expiry);
+            statsClient = new StatsModel(redisClient, interval, expiry);
 
             statsClient.reportNewRequest(`${site1}:${OPS}`, 1725);
             statsClient.reportNewRequest(`${site1}:${BYTES}`, 219800);
