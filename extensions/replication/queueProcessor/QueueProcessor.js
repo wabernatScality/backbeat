@@ -78,6 +78,7 @@ class QueueProcessor extends EventEmitter {
         this._consumer = null;
         this.site = site;
         this._mProducer = mProducer;
+        this._bootstraplist = this.destConfig.bootstrapList;
 
         this.echoMode = false;
 
@@ -258,21 +259,33 @@ class QueueProcessor extends EventEmitter {
                 this._consumer.on('error', () => {});
                 this._consumer.subscribe();
 
-                this._consumer.on('metrics', (data, gId) => {
+                this._consumer.on('metrics', data => {
                     // i.e. data = { my-site: { ops: 1, bytes: 124 },
                     //               aws_s3: { ... } }
                     console.log('\nA METRICS EVENT OCCURRED!')
                     console.log(data)
-                    if (groupId === gId) {
-                        this._mProducer.publishMetrics(data,
-                            metricsTypeProcessed, metricsExtension, err => {
-                                this.logger.trace('error occurred in ' +
-                                'publishing metrics', {
-                                    error: err,
-                                    method: 'QueueProcessor.start',
-                                });
+                    const filteredData = Object.keys(data).filter(key =>
+                        key === this.site).reduce((store, k) => {
+                            /* eslint-disable no-param-reassign */
+                            const match = this._bootstraplist.find(s =>
+                                s.site === k);
+                            if (match.type) {
+                                store[match.type] = data[this.site];
+                            } else {
+                                store[k] = data[this.site];
+                            }
+                            return store;
+                            /* eslint-enable no-param-reassign */
+                        }, {});
+
+                    this._mProducer.publishMetrics(filteredData,
+                        metricsTypeProcessed, metricsExtension, err => {
+                            this.logger.trace('error occurred in ' +
+                            'publishing metrics', {
+                                error: err,
+                                method: 'QueueProcessor.start',
                             });
-                    }
+                        });
                 });
             }
             this.logger.info('queue processor is ready to consume ' +
