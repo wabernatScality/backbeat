@@ -151,6 +151,9 @@ class ReplicationStatusProcessor {
         }
         let task;
         if (sourceEntry instanceof ObjectQueueEntry) {
+            console.log('\nnew replication status update happening');
+            console.log('site: ', sourceEntry.getSite())
+            console.log('loginfo: ', sourceEntry.getLogInfo())
             task = new UpdateReplicationStatus(this);
         }
         if (task) {
