@@ -78,7 +78,6 @@ class QueueProcessor extends EventEmitter {
         this._consumer = null;
         this.site = site;
         this._mProducer = mProducer;
-        this._bootstraplist = this.destConfig.bootstrapList;
 
         this.echoMode = false;
 
@@ -266,16 +265,9 @@ class QueueProcessor extends EventEmitter {
                     console.log(data)
                     const filteredData = Object.keys(data).filter(key =>
                         key === this.site).reduce((store, k) => {
-                            /* eslint-disable no-param-reassign */
-                            const match = this._bootstraplist.find(s =>
-                                s.site === k);
-                            if (match.type) {
-                                store[match.type] = data[this.site];
-                            } else {
-                                store[k] = data[this.site];
-                            }
+                            // eslint-disable-next-line no-param-reassign
+                            store[k] = data[this.site];
                             return store;
-                            /* eslint-enable no-param-reassign */
                         }, {});
 
                     this._mProducer.publishMetrics(filteredData,
