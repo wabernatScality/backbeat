@@ -23,7 +23,7 @@ describe('BackbeatTestConsumer', function backbeatTestConsumer() {
         async.series([
             next => {
                 producer = new BackbeatProducer({
-                    zookeeper: { connectionString: 'localhost:2181' },
+                    kafka: { hosts: 'localhost:9092' },
                     topic: TOPIC,
                 });
                 producer.once('error', next);
@@ -34,7 +34,7 @@ describe('BackbeatTestConsumer', function backbeatTestConsumer() {
             },
             next => {
                 consumer = new BackbeatTestConsumer({
-                    zookeeper: { connectionString: 'localhost:2181' },
+                    kafka: { hosts: 'localhost:9092' },
                     topic: TOPIC,
                     groupId: GROUP_ID,
                 });

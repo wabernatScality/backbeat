@@ -32,9 +32,9 @@ class ReplicationStatusProcessor {
 
     /**
      * @constructor
-     * @param {Object} zkConfig - zookeeper configuration object
-     * @param {string} zkConfig.connectionString - zookeeper connection string
-     *   as "host:port[/chroot]"
+     * @param {Object} kafkaConfig - kafka configuration object
+     * @param {string} kafkaConfig.hosts - list of kafka brokers
+     *   as "host:port[,host:port...]"
      * @param {Object} sourceConfig - source S3 configuration
      * @param {Object} sourceConfig.s3 - s3 endpoint configuration object
      * @param {Object} sourceConfig.auth - authentication info on source
@@ -49,8 +49,8 @@ class ReplicationStatusProcessor {
      *   number of seconds before giving up retries of an entry status
      *   update
      */
-    constructor(zkConfig, sourceConfig, repConfig) {
-        this.zkConfig = zkConfig;
+    constructor(kafkaConfig, sourceConfig, repConfig) {
+        this.kafkaConfig = kafkaConfig;
         this.sourceConfig = sourceConfig;
         this.repConfig = repConfig;
         this._consumer = null;
@@ -100,7 +100,7 @@ class ReplicationStatusProcessor {
      */
     start(options) {
         this._consumer = new BackbeatConsumer({
-            zookeeper: { connectionString: this.zkConfig.connectionString },
+            kafka: { hosts: this.kafkaConfig.hosts },
             topic: this.repConfig.replicationStatusTopic,
             groupId: this.repConfig.replicationStatusProcessor.groupId,
             concurrency:
@@ -110,12 +110,13 @@ class ReplicationStatusProcessor {
             createConsumer: (!options || options.createConsumer),
         });
         this._consumer.on('error', () => {});
-        if (!options || options.createConsumer) {
-            this._consumer.subscribe();
-        }
-
-        this.logger.info('replication status processor is ready to consume ' +
-                         'replication status entries');
+        this._consumer.on('ready', () => {
+            if (!options || options.createConsumer) {
+                this._consumer.subscribe();
+            }
+            this.logger.info('replication status processor is ready to ' +
+                             'consume replication status entries');
+        });
     }
 
     /**

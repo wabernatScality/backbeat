@@ -634,7 +634,7 @@ describe('queue processor functional tests with mocking', () => {
                   constants.target.hosts.map(h => `${h.host}:${h.port}`);
 
         queueProcessor = new QueueProcessor(
-            { connectionString: 'localhost:2181' },
+            { hosts: 'localhost:9092' },
             { auth: { type: 'role',
                 vault: { host: constants.source.vault,
                     port: 7777 } },
@@ -661,7 +661,7 @@ describe('queue processor functional tests with mocking', () => {
         // stuck waiting for entries.
         queueProcessor.on('ready', () => {
             replicationStatusProcessor = new ReplicationStatusProcessor(
-                { connectionString: 'localhost:2181' },
+                { hosts: 'localhost:9092' },
                 { auth: { type: 'role',
                           vault: { host: constants.source.vault,
                                    port: 7777 } },
