@@ -261,6 +261,8 @@ class QueueProcessor extends EventEmitter {
                 this._consumer.on('metrics', data => {
                     // i.e. data = { my-site: { ops: 1, bytes: 124 },
                     //               aws_s3: { ... } }
+                    console.log('\nA METRICS EVENT OCCURRED!')
+                    console.log(data)
                     this._mProducer.publishMetrics(data, metricsTypeProcessed,
                         metricsExtension, err => {
                             this.logger.trace('error occurred in publishing ' +
