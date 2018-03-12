@@ -49,8 +49,7 @@ class Config {
         }
 
         // default to standalone configuration if sentinel not setup
-        if (!parsedConfig.redis || (parsedConfig.redis &&
-            !parsedConfig.redis.sentinels)) {
+        if (!parsedConfig.redis || !parsedConfig.redis.sentinels) {
             this.redis = Object.assign({}, parsedConfig.redis,
                 { host: '127.0.0.1', port: 6379 });
         }
