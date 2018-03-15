@@ -259,7 +259,7 @@ class QueueProcessor extends EventEmitter {
                 this._consumer.subscribe();
 
                 this._consumer.on('metrics', data => {
-                    // i.e. data = { my-bucket: { ops: 1, bytes: 124 } }
+                    // i.e. data = { my-site: { ops: 1, bytes: 124 } }
                     const filteredData = Object.keys(data).filter(key =>
                         key === this.site).reduce((store, k) => {
                             // eslint-disable-next-line no-param-reassign
