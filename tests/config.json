@@ -45,6 +45,7 @@
                     { "site": "test-site-2", "type": "aws_s3" }
                 ]
             }
+<<<<<<< HEAD
         },
         "lifecycle": {
             "zookeeperPath": "/lifecycletest",
@@ -74,6 +75,8 @@
                     "enabled": true
                 }
             }
+=======
+>>>>>>> 7714d1fdaff0f4a6b44abfb181f964a426e1c5d0
         }
     },
     "log": {
