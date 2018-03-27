@@ -590,7 +590,7 @@ describe('Backbeat Server', () => {
                 this.timeout(30000);
                 const cmds = [];
                 const reqBody = [];
-                for (let i = 0; i < 20000; i++) {
+                for (let i = 0; i < 2000; i++) {
                     reqBody.push({
                         bucket: `bucket-${i}`,
                         key: `key-${i}`,
@@ -635,7 +635,7 @@ describe('Backbeat Server', () => {
                         getResponseBody(res, (err, resBody) => {
                             assert.ifError(err);
                             const body = JSON.parse(resBody);
-                            assert.strictEqual(body.length, 20000 * 5);
+                            assert.strictEqual(body.length, 2000 * 5);
                             done();
                         });
                     });
