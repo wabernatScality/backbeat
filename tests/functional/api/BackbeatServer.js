@@ -3,7 +3,6 @@ const async = require('async');
 const http = require('http');
 const Redis = require('ioredis');
 const { Producer } = require('node-rdkafka');
-const async = require('async');
 
 const { RedisClient } = require('arsenal').metrics;
 
