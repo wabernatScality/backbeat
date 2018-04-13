@@ -25,7 +25,7 @@
         "zookeeperPath": "/queue-populator",
         "logSource": "mongo",
         "bucketd": {
-            "host": "127.0.0.1",
+            "host": "localhost",
             "port": 9000
         },
         "dmd": {
@@ -33,15 +33,47 @@
             "port": 9990
         },
         "mongo": {
-            "replicaSetHosts":
-                "localhost:27017,localhost:27018,localhost:27019",
+            "replicaSetHosts": "localhost:27017,localhost:27018,localhost:27019",
             "writeConcern": "majority",
             "replicaSet": "rs0",
             "readPreference": "primary",
             "database": "metadata"
         }
     },
+    "ingestion": {
+        "zookeeperPath": "/ingestion",
+        "cronRule": "*/5 * * * * *",
+        "sources": [
+            {
+                "name": "source1",
+                "cronRule": "*/5 * * * * *",
+                "zookeeperSuffix": "/source1",
+                "host": "54.202.35.127",
+                "port": 9000,
+                "https": false,
+                "type": "scality",
+                "raftCount": 8
+            },
+            {
+                "name": "source2",
+                "zookeeperSuffix": "/source2",
+                "host": "",
+                "port": 9000,
+                "https": false,
+                "type": "aws"
+            }
+        ]
+        
+    },
     "extensions": {
+        "ingestion": {
+            "topic": "backbeat-ingestion"
+        },
+        "mongoProcessor": {
+            "topic": "backbeat-ingestion",
+            "groupId": "backbeat-mongo-processor-group",
+            "retryTimeoutS": 300
+        },
         "replication": {
             "source": {
                 "transport": "http",
@@ -87,40 +119,6 @@
                 "groupId": "backbeat-replication-group",
                 "retryTimeoutS": 300,
                 "concurrency": 10
-            }
-        },
-        "lifecycle": {
-            "zookeeperPath": "/lifecycle",
-            "bucketTasksTopic": "backbeat-lifecycle-bucket-tasks",
-            "objectTasksTopic": "backbeat-lifecycle-object-tasks",
-            "backlogMetrics": {
-                "zkPath": "/lifecycle/run/backlog-metrics",
-                "intervalS": 60
-            },
-            "conductor": {
-                "cronRule": "0 */5 * * * *",
-                "concurrency": 10
-            },
-            "producer": {
-                "groupId": "backbeat-lifecycle-producer-group",
-                "retryTimeoutS": 300,
-                "concurrency": 10
-            },
-            "consumer": {
-                "groupId": "backbeat-lifecycle-consumer-group",
-                "retryTimeoutS": 300,
-                "concurrency": 10
-            },
-            "rules": {
-                "expiration": {
-                    "enabled": true
-                },
-                "noncurrentVersionExpiration": {
-                    "enabled": true
-                },
-                "abortIncompleteMultipartUpload": {
-                    "enabled": true
-                }
             }
         }
     },
