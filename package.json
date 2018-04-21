@@ -30,11 +30,11 @@
   },
   "homepage": "https://github.com/scality/backbeat#readme",
   "dependencies": {
-    "arsenal": "file:../Arsenal",
+    "arsenal": "scality/Arsenal",
     "async": "^2.3.0",
     "aws-sdk": "2.147.0",
     "backo": "^1.1.0",
-    "bucketclient": "file:../bucketclient",
+    "bucketclient": "scality/bucketclient",
     "commander": "^2.11.0",
     "eslint": "^2.4.0",
     "eslint-config-airbnb": "^6.0.0",
@@ -46,7 +46,7 @@
     "node-schedule": "^1.2.0",
     "node-zookeeper-client": "^0.2.2",
     "uuid": "^3.1.0",
-    "vaultclient": "github:scality/vaultclient",
+    "vaultclient": "scality/vaultclient",
     "werelogs": "scality/werelogs"
   },
   "devDependencies": {
