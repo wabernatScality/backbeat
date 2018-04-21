@@ -1,18 +1,18 @@
-const async = require('async');
+// const async = require('async');
 const assert = require('assert');
 // const Server = require('arsenal').network.http.server;
 const http = require('http');
-const querystring = require('querystring');
-const URL = require('url');
-const werelogs = require('werelogs');
-const Logger = werelogs.Logger;
+// const querystring = require('querystring');
+// const URL = require('url');
+// const werelogs = require('werelogs');
+// const Logger = werelogs.Logger;
 const BucketInfo = require('arsenal').models.BucketInfo;
 const QueuePopulator = require('../../../lib/queuePopulator/QueuePopulator');
 const IngestionProducer =
     require('../../../lib/queuePopulator/IngestionProducer');
 const testConfig = require('../../config.json');
 
-const logger = new Logger('IngestionProducer:test:metadataMock');
+// const logger = new Logger('IngestionProducer:test:metadataMock');
 
 const dummyBucketMD = {
     bucket1: {
@@ -113,13 +113,9 @@ const objectList = {
 
 class MetadataMock {
     onRequest(req, res) {
-        console.log('RECEIVED REQUEST');
-        console.log('req url', req.url);
-        console.log('req query', req.query);
-        console.log('req headers', req.headers);
-        const url = URL.parse(req.url);
-        const query = querystring.parse(req.query);
-        const host = req.headers.host.split(':')[0];
+        // const url = URL.parse(req.url);
+        // const query = querystring.parse(req.query);
+        // const host = req.headers.host.split(':')[0];
         // this.requestsPerHost[host] += 1;
         if (req.method !== 'GET') {
             res.writeHead(501);
@@ -128,13 +124,11 @@ class MetadataMock {
             }));
         }
         if (/\/_\/raft_sessions\/[1-8]\/bucket/.test(req.url)) {
-            console.log('getting buckets for raft session');
             const value = ['bucket1'];
             res.writeHead(200, { 'content-type': 'application/json' });
             // return res.end(JSON.stringify(value));
             return res.end(JSON.stringify(value));
         } else if (/\/default\/attributes\/[a-z0-9]/.test(req.url)) {
-            console.log('trying to grab md for request bucket');
             const bucketName = req.url.split('/');
             const bucketMd = dummyBucketMD[bucketName[bucketName.length - 1]];
             const dummyBucketMdObj = new BucketInfo(bucketMd._name, bucketMd._owner,
@@ -143,16 +137,10 @@ class MetadataMock {
                 bucketMd._deleted, bucketMd._serverSideEncryption,
                 bucketMd.versioningConfiguration, bucketMd._locationContraint,
                 bucketMd._websiteConfiguration, bucketMd._cors, bucketMd._lifeCycle);
-            console.log('getting bucket metadata');
-            console.log('stringify bucketMd', JSON.stringify(bucketMd));
-            console.log('stringify dummyObj', dummyBucketMdObj.serialize());
             return res.end(dummyBucketMdObj.serialize());
         } else if (/\/default\/bucket\/.*?listingType=Delimiter/.test(req.url)) {
-            console.log('listing objects in bucket');
-            console.log(req.url);
             return res.end(JSON.stringify(objectList));
         } else if (/\/default\/bucket\/.*\/.*?/.test(req.url)) {
-            console.log('getting object metadata');
             return res.end(JSON.stringify({
                 metadata: 'dogsAreGood',
             }));
@@ -168,7 +156,6 @@ describe.only('ingestion producer functional tests with mock', () => {
     let metadataMock;
 
     before(done => {
-        console.log('before the ingesion producer test');
         metadataMock = new MetadataMock();
         // httpServer = new Server(7777, logger);
         // metadataMock.start();
@@ -203,7 +190,6 @@ describe.only('ingestion producer functional tests with mock', () => {
     it('can generate a valid snapshot', done => {
         return this.iProducer.snapshot(1, (err, res) => {
             // we expect 3 logs - 2 logs for the bucket, and 1 log for the obj.
-            console.log(res);
             assert.strictEqual(res.length, 3);
             res.forEach(entry => {
                 assert(entry.type);
