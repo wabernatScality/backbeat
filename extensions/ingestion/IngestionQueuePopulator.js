@@ -9,7 +9,6 @@ class IngestionQueuePopulator extends QueuePopulatorExtension {
     }
 
     createZkPath(cb, source) {
-        console.log('creating paths');
         const { zookeeperPath } = this.extConfig;
         const pathArray = [];
         if (source.raftCount) {
@@ -18,30 +17,28 @@ class IngestionQueuePopulator extends QueuePopulatorExtension {
                 pathArray.push(path);
             }
         }
-        pathArray.forEach(path => {
-            return this.zkClient.getData(path, err => {
-                if (err) {
-                    if (err.name !== 'NO_NODE') {
-                        this.log.error('could not get zookeeper node path', {
+        pathArray.forEach(path => this.zkClient.getData(path, err => {
+            if (err) {
+                if (err.name !== 'NO_NODE') {
+                    this.log.error('error getting zookeeper node', {
+                        method: 'IngestionQueuePopulator.createZkPath',
+                        error: err,
+                    });
+                    return cb(err);
+                }
+                return this.zkClient.mkdirp(path, err => {
+                    if (err) {
+                        this.log.error('error creating zookeeper path', {
                             method: 'IngestionQueuePopulator.createZkPath',
+                            zookeeperPath,
                             error: err,
                         });
                         return cb(err);
                     }
-                    return this.zkClient.mkdirp(path, err => {
-                        if (err) {
-                            this.log.error('could not create path in zookeeper', {
-                                method: 'IngestionQueuePopulator.createZkPath',
-                                zookeeperPath,
-                                error: err,
-                            });
-                            return cb(err);
-                        }
-                        // return cb();
-                    });
-                }
-            });
-        });
+                    // return cb();
+                });
+            }
+        }));
     }
 
     _setupZookeeper(done) {
@@ -75,7 +72,6 @@ class IngestionQueuePopulator extends QueuePopulatorExtension {
         }
         this.log.info('publishing entry',
                        { entryBucket: entry.bucket, entryKey: entry.key });
-        console.log('this.config.topic', this.config.topic);
         this.publish(this.config.topic,
                      `${entry.bucket}/${entry.key}`,
                      JSON.stringify(entry));
