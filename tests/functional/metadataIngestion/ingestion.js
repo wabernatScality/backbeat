@@ -29,13 +29,33 @@ const testZkPaths = [
     '/backbeat/ingestion/source1/raft-id-dispatcher/provisions/6',
     '/backbeat/ingestion/source1/raft-id-dispatcher/provisions/7',
     '/backbeat/ingestion/source1/raft-id-dispatcher/provisions/8',
+    '/queue-populator',
+    '/queue-populator/logState',
+    '/queue-populator/logState/raft_1',
+    '/queue-populator/logState/raft_2',
+    '/queue-populator/logState/raft_3',
+    '/queue-populator/logState/raft_4',
+    '/queue-populator/logState/raft_5',
+    '/queue-populator/logState/raft_6',
+    '/queue-populator/logState/raft_7',
+    '/queue-populator/logState/raft_8',
+];
+
+const logOffsetPaths = [
+    { path: '/queue-populator/logState/raft_1/logOffset', value: '1' },
+    { path: '/queue-populator/logState/raft_2/logOffset', value: '1' },
+    { path: '/queue-populator/logState/raft_3/logOffset', value: '1' },
+    { path: '/queue-populator/logState/raft_4/logOffset', value: '1' },
+    { path: '/queue-populator/logState/raft_5/logOffset', value: '1' },
+    { path: '/queue-populator/logState/raft_6/logOffset', value: '1' },
+    { path: '/queue-populator/logState/raft_7/logOffset', value: '1' },
+    { path: '/queue-populator/logState/raft_8/logOffset', value: '1' },
 ];
 
 describe.only('Ingest metadata to kafka', () => {
     let metadataMock;
     let httpServer;
     let kafkaConsumer;
-    let iProducer;
     let queuePopulator;
     let zkClient;
 
@@ -58,13 +78,13 @@ describe.only('Ingest metadata to kafka', () => {
                     metadataMock.onRequest(req, res)).listen(7779);
                 return next();
             },
-            next => {
-                iProducer = new IngestionProducer({
-                    host: 'localhost:7779',
-                    port: 7779,
-                });
-                return next();
-            },
+            // next => {
+            //     iProducer = new IngestionProducer({
+            //         host: 'localhost:7779',
+            //         port: 7779,
+            //     });
+            //     return next();
+            // },
             next => {
                 zkClient = zookeeper.createClient('127.0.0.1:2181');
                 zkClient.connect();
@@ -86,6 +106,28 @@ describe.only('Ingest metadata to kafka', () => {
                         return cb(err, res);
                     });
                 }, next);
+            },
+            next => {
+                return async.each(logOffsetPaths, (logOffset, cb) => {
+                    const buf = Buffer.from(logOffset.value, 'utf-8');
+                    console.log('here is the buffer', buf);
+                    return async.waterfall([
+                        next => zkClient.mkdirp(logOffset.path, buf, (err, res) => {
+                            console.log('trying to create logOffset', err, res);
+                            return next();
+                        }),
+                        next => zkClient.setData(logOffset.path, buf, (err, res) => {
+                            console.log('trying to set data to logOffset', err, res);
+                            return next();
+                        }),
+                    ], cb);
+                }, next);
+            },
+            next => {
+                return zkClient.getData(logOffsetPaths[0].path, (err, data) => {
+                    console.log(`DATA AT ${logOffsetPaths[0]}.path`, err, data);
+                    return next();
+                });
             },
             next => {
                 queuePopulator = new QueuePopulator(testConfig.zookeeper,

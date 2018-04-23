@@ -99,52 +99,48 @@ const objectList = {
     ],
 };
 
-const mockLogs = {
-    info: {
-        "start": 1,
-        "cseq": 4,
-        "prune": 1
-    },
-    log: [
-    {
-        type: 'put',
-        bucket: 'prom',
-        key: 'f6',
-        value: '{"owner-display-name":"test_1518720219","owner-id":' +
-        '"94224c921648ada653f584f3caf42654ccf3f1cbd2e569a24e88eb460f2f84d8",' +
-        '"content-length":0,"content-md5":"d41d8cd98f00b204e9800998ecf8427e",' +
-        '"x-amz-version-id":"null","x-amz-server-version-id":"",' +
-        '"x-amz-storage-class":"STANDARD","x-amz-server-side-encryption":"",' +
-        '"x-amz-server-side-encryption-aws-kms-key-id":"",' +
-        '"x-amz-server-side-encryption-customer-algorithm":"",' +
-        '"x-amz-website-redirect-location":"","acl":{"Canned":"private",' +
-        '"FULL_CONTROL":[],"WRITE_ACP":[],"READ":[],"READ_ACP":[]},"key":"",' +
-        '"location":null,"isDeleteMarker":false,"tags":{},"replicationInfo":' +
-        '{"status":"","backends":[],"content":[],"destination":"",' +
-        '"storageClass":"","role":"","storageType":"","dataStoreVersionId":"' +
-        '"},"dataStoreName":"us-east-1","last-modified":' +
-        '"2018-02-20T03:13:43.273Z","md-model-version":3}',
-    },
-    {
-        type: 'put',
-        bucket: 'prom',
-        key: 'g4',
-        value: '{"owner-display-name":"test_1518720219","owner-id":' +
-        '"94224c921648ada653f584f3caf42654ccf3f1cbd2e569a24e88eb460f2f84d8",' +
-        '"content-length":0,"content-md5":"d41d8cd98f00b204e9800998ecf8427e",' +
-        '"x-amz-version-id":"null","x-amz-server-version-id":"",' +
-        '"x-amz-storage-class":"STANDARD","x-amz-server-side-encryption":"",' +
-        '"x-amz-server-side-encryption-aws-kms-key-id":"",' +
-        '"x-amz-server-side-encryption-customer-algorithm":"",' +
-        '"x-amz-website-redirect-location":"","acl":{"Canned":"private",' +
-        '"FULL_CONTROL":[],"WRITE_ACP":[],"READ":[],"READ_ACP":[]},"key":"",' +
-        '"location":null,"isDeleteMarker":false,"tags":{},"replicationInfo":{' +
-        '"status":"","backends":[],"content":[],"destination":"","' +
-        'storageClass":"","role":"","storageType":"","dataStoreVersionId":' +
-        '""},"dataStoreName":"us-east-1","last-modified":' +
-        '"2018-02-20T04:47:20.359Z","md-model-version":3}',
-    },
-]};
+const mockLogs = {"info":{"start":1,"cseq":7,"prune":1},"log":[{"db":"friday","method":0,"entries":[{"value":"{\"attributes\":\"{\\\"name\\\":\\\"friday\\\",\\\"owner\\\":\\\"94224c921648ada653f584f3caf42654ccf3f1cbd2e569a24e88eb460f2f84d8\\\",\\\"ownerDisplayName\\\":\\\"test_1518720219\\\",\\\"creationDate\\\":\\\"2018-02-16T19:59:31.664Z\\\",\\\"mdBucketModelVersion\\\":5,\\\"transient\\\":true,\\\"deleted\\\":false,\\\"serverSideEncryption\\\":null,\\\"versioningConfiguration\\\":null,\\\"locationConstraint\\\":\\\"us-east-1\\\",\\\"cors\\\":null,\\\"replicationConfiguration\\\":null}\"}"}]},{"db":"friday","method":7,"entries":[{"value":"{\"attributes\":\"{\\\"name\\\":\\\"friday\\\",\\\"owner\\\":\\\"94224c921648ada653f584f3caf42654ccf3f1cbd2e569a24e88eb460f2f84d8\\\",\\\"ownerDisplayName\\\":\\\"test_1518720219\\\",\\\"creationDate\\\":\\\"2018-02-16T19:59:31.664Z\\\",\\\"mdBucketModelVersion\\\":5,\\\"transient\\\":false,\\\"deleted\\\":false,\\\"serverSideEncryption\\\":null,\\\"versioningConfiguration\\\":null,\\\"locationConstraint\\\":\\\"us-east-1\\\",\\\"cors\\\":null,\\\"replicationConfiguration\\\":null}\",\"raftSession\":1}"}]},{"db":"friday7","method":0,"entries":[{"value":"{\"attributes\":\"{\\\"name\\\":\\\"friday7\\\",\\\"owner\\\":\\\"94224c921648ada653f584f3caf42654ccf3f1cbd2e569a24e88eb460f2f84d8\\\",\\\"ownerDisplayName\\\":\\\"test_1518720219\\\",\\\"creationDate\\\":\\\"2018-02-16T20:41:34.253Z\\\",\\\"mdBucketModelVersion\\\":5,\\\"transient\\\":true,\\\"deleted\\\":false,\\\"serverSideEncryption\\\":null,\\\"versioningConfiguration\\\":null,\\\"locationConstraint\\\":\\\"us-east-1\\\",\\\"cors\\\":null,\\\"replicationConfiguration\\\":null}\"}"}]},{"db":"friday7","method":7,"entries":[{"value":"{\"attributes\":\"{\\\"name\\\":\\\"friday7\\\",\\\"owner\\\":\\\"94224c921648ada653f584f3caf42654ccf3f1cbd2e569a24e88eb460f2f84d8\\\",\\\"ownerDisplayName\\\":\\\"test_1518720219\\\",\\\"creationDate\\\":\\\"2018-02-16T20:41:34.253Z\\\",\\\"mdBucketModelVersion\\\":5,\\\"transient\\\":false,\\\"deleted\\\":false,\\\"serverSideEncryption\\\":null,\\\"versioningConfiguration\\\":null,\\\"locationConstraint\\\":\\\"us-east-1\\\",\\\"cors\\\":null,\\\"replicationConfiguration\\\":null}\",\"raftSession\":1}"}]},{"db":"xxxfriday10","method":0,"entries":[{"value":"{\"attributes\":\"{\\\"name\\\":\\\"xxxfriday10\\\",\\\"owner\\\":\\\"94224c921648ada653f584f3caf42654ccf3f1cbd2e569a24e88eb460f2f84d8\\\",\\\"ownerDisplayName\\\":\\\"test_1518720219\\\",\\\"creationDate\\\":\\\"2018-02-16T21:55:16.415Z\\\",\\\"mdBucketModelVersion\\\":5,\\\"transient\\\":true,\\\"deleted\\\":false,\\\"serverSideEncryption\\\":null,\\\"versioningConfiguration\\\":null,\\\"locationConstraint\\\":\\\"us-east-1\\\",\\\"cors\\\":null,\\\"replicationConfiguration\\\":null}\"}"}]},{"db":"xxxfriday10","method":7,"entries":[{"value":"{\"attributes\":\"{\\\"name\\\":\\\"xxxfriday10\\\",\\\"owner\\\":\\\"94224c921648ada653f584f3caf42654ccf3f1cbd2e569a24e88eb460f2f84d8\\\",\\\"ownerDisplayName\\\":\\\"test_1518720219\\\",\\\"creationDate\\\":\\\"2018-02-16T21:55:16.415Z\\\",\\\"mdBucketModelVersion\\\":5,\\\"transient\\\":false,\\\"deleted\\\":false,\\\"serverSideEncryption\\\":null,\\\"versioningConfiguration\\\":null,\\\"locationConstraint\\\":\\\"us-east-1\\\",\\\"cors\\\":null,\\\"replicationConfiguration\\\":null}\",\"raftSession\":1}"}]},{"db":"xxxfriday10","entries":[{"key":"afternoon","value":"{\"owner-display-name\":\"test_1518720219\",\"owner-id\":\"94224c921648ada653f584f3caf42654ccf3f1cbd2e569a24e88eb460f2f84d8\",\"content-length\":0,\"content-md5\":\"d41d8cd98f00b204e9800998ecf8427e\",\"x-amz-version-id\":\"null\",\"x-amz-server-version-id\":\"\",\"x-amz-storage-class\":\"STANDARD\",\"x-amz-server-side-encryption\":\"\",\"x-amz-server-side-encryption-aws-kms-key-id\":\"\",\"x-amz-server-side-encryption-customer-algorithm\":\"\",\"x-amz-website-redirect-location\":\"\",\"acl\":{\"Canned\":\"private\",\"FULL_CONTROL\":[],\"WRITE_ACP\":[],\"READ\":[],\"READ_ACP\":[]},\"key\":\"\",\"location\":null,\"isDeleteMarker\":false,\"tags\":{},\"replicationInfo\":{\"status\":\"\",\"backends\":[],\"content\":[],\"destination\":\"\",\"storageClass\":\"\",\"role\":\"\",\"storageType\":\"\",\"dataStoreVersionId\":\"\"},\"dataStoreName\":\"us-east-1\",\"last-modified\":\"2018-02-16T21:56:52.690Z\",\"md-model-version\":3}"}],"method":8}]}
+
+// const mockLogs = [
+//     {
+//         type: 'put',
+//         bucket: 'prom',
+//         key: 'f6',
+//         value: '{"owner-display-name":"test_1518720219","owner-id":' +
+//         '"94224c921648ada653f584f3caf42654ccf3f1cbd2e569a24e88eb460f2f84d8",' +
+//         '"content-length":0,"content-md5":"d41d8cd98f00b204e9800998ecf8427e",' +
+//         '"x-amz-version-id":"null","x-amz-server-version-id":"",' +
+//         '"x-amz-storage-class":"STANDARD","x-amz-server-side-encryption":"",' +
+//         '"x-amz-server-side-encryption-aws-kms-key-id":"",' +
+//         '"x-amz-server-side-encryption-customer-algorithm":"",' +
+//         '"x-amz-website-redirect-location":"","acl":{"Canned":"private",' +
+//         '"FULL_CONTROL":[],"WRITE_ACP":[],"READ":[],"READ_ACP":[]},"key":"",' +
+//         '"location":null,"isDeleteMarker":false,"tags":{},"replicationInfo":' +
+//         '{"status":"","backends":[],"content":[],"destination":"",' +
+//         '"storageClass":"","role":"","storageType":"","dataStoreVersionId":"' +
+//         '"},"dataStoreName":"us-east-1","last-modified":' +
+//         '"2018-02-20T03:13:43.273Z","md-model-version":3}',
+//     },
+//     {
+//         type: 'put',
+//         bucket: 'prom',
+//         key: 'g4',
+//         value: '{"owner-display-name":"test_1518720219","owner-id":' +
+//         '"94224c921648ada653f584f3caf42654ccf3f1cbd2e569a24e88eb460f2f84d8",' +
+//         '"content-length":0,"content-md5":"d41d8cd98f00b204e9800998ecf8427e",' +
+//         '"x-amz-version-id":"null","x-amz-server-version-id":"",' +
+//         '"x-amz-storage-class":"STANDARD","x-amz-server-side-encryption":"",' +
+//         '"x-amz-server-side-encryption-aws-kms-key-id":"",' +
+//         '"x-amz-server-side-encryption-customer-algorithm":"",' +
+//         '"x-amz-website-redirect-location":"","acl":{"Canned":"private",' +
+//         '"FULL_CONTROL":[],"WRITE_ACP":[],"READ":[],"READ_ACP":[]},"key":"",' +
+//         '"location":null,"isDeleteMarker":false,"tags":{},"replicationInfo":{' +
+//         '"status":"","backends":[],"content":[],"destination":"","' +
+//         'storageClass":"","role":"","storageType":"","dataStoreVersionId":' +
+//         '""},"dataStoreName":"us-east-1","last-modified":' +
+//         '"2018-02-20T04:47:20.359Z","md-model-version":3}',
+//     },
+// ];
 
 class MetadataMock {
     onRequest(req, res) {
@@ -192,10 +188,8 @@ class MetadataMock {
                 metadata: 'dogsAreGood',
             }));
         } else if (/\/_\/raft_sessions\/[\d]*\/log\?begin=[\d]*&limit=[\d]*&targetLeader=false/.test(req.url)) {
-            console.log('getting raft logs from metadata mock!');
-            return res.end(JSON.stringify({
-                mockLogs
-            }));
+            console.log('getting raft logs from metadata mock!', mockLogs);
+            return res.end(JSON.stringify(mockLogs));
         }
         //  else if() {
         //     console.log('getting raft log offset');
