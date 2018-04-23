@@ -68,11 +68,6 @@
         "ingestion": {
             "topic": "backbeat-ingestion"
         },
-        "mongoProcessor": {
-            "topic": "backbeat-ingestion",
-            "groupId": "backbeat-mongo-processor-group",
-            "retryTimeoutS": 300
-        },
         "replication": {
             "topic": "backbeat-test-replication",
             "replicationStatusTopic": "backbeat-test-replication-status",
