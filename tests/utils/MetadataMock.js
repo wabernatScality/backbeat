@@ -99,7 +99,13 @@ const objectList = {
     ],
 };
 
-const mockLogs = [
+const mockLogs = {
+    info: {
+        "start": 1,
+        "cseq": 4,
+        "prune": 1
+    },
+    log: [
     {
         type: 'put',
         bucket: 'prom',
@@ -138,7 +144,7 @@ const mockLogs = [
         '""},"dataStoreName":"us-east-1","last-modified":' +
         '"2018-02-20T04:47:20.359Z","md-model-version":3}',
     },
-];
+]};
 
 class MetadataMock {
     onRequest(req, res) {
