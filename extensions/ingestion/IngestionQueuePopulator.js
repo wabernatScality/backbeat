@@ -47,10 +47,11 @@ class IngestionQueuePopulator extends QueuePopulatorExtension {
                         }
                         // return cb();
                     });
-                }
-            });
-        });
+                });
+            }
+        }));
     }
+
 
     _setupZookeeper(done) {
         const populatorZkPath = this.qpConfig.zookeeperPath;

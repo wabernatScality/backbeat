@@ -27,7 +27,7 @@
         "cronRule": "*/5 * * * * *",
         "batchMaxRead": 10000,
         "zookeeperPath": "/backbeat/test/queue-populator",
-        "logSource": "dmd",
+        "logSource": "ingestion",
         "dmd": {
             "host": "127.0.0.1",
             "port": 9990,
@@ -38,7 +38,41 @@
             "replicaSetHosts": "localhost:27017,localhost:27018,localhost:27019"
         }
     },
+    "ingestion": {
+        "zookeeperPath": "/ingestion",
+        "cronRule": "*/5 * * * * *",
+        "sources": [
+            {
+                "prefix": "bucketPrefix1",
+                "name": "source1",
+                "cronRule": "*/5 * * * * *",
+                "zookeeperSuffix": "/scalitys3",
+                "host": "127.0.0.2",
+                "port": 9000,
+                "https": false,
+                "type": "scality",
+                "raftCount": 8
+            },
+            {
+                "prefix": "bucketPrefix2",
+                "name": "source2",
+                "zookeeperSuffix": "/source2",
+                "host": "",
+                "port": 9000,
+                "https": false,
+                "type": "aws"
+            }
+        ]
+    },
     "extensions": {
+        "ingestion": {
+            "topic": "backbeat-ingestion"
+        },
+        "mongoProcessor": {
+            "topic": "backbeat-ingestion",
+            "groupId": "backbeat-mongo-processor-group",
+            "retryTimeoutS": 300
+        },
         "replication": {
             "topic": "backbeat-test-replication",
             "replicationStatusTopic": "backbeat-test-replication-status",

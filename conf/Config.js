@@ -48,8 +48,12 @@ class Config extends EventEmitter {
                                          'invalid backbeat config');
 
         if (parsedConfig.extensions) {
+            console.log('parsedConfig.extensions', parsedConfig.extensions);
             Object.keys(parsedConfig.extensions).forEach(extName => {
                 const index = extensions[extName];
+                console.log('extensions', extensions);
+                console.log('extName', extName);
+                console.log('extensions[extName]', extensions[extName]);
                 if (!index) {
                     throw new Error(`configured extension ${extName}: ` +
                                     'not found in extensions directory');
