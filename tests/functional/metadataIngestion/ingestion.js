@@ -54,7 +54,8 @@ const logOffsetPaths = [
 
 describe.only('Ingest metadata to kafka', () => {
     let metadataMock;
-    let httpServer;
+    let httpServerSnapshot;
+    let httpServerLogs;
     let kafkaConsumer;
     let queuePopulator;
     let zkClient;
@@ -74,8 +75,10 @@ describe.only('Ingest metadata to kafka', () => {
             },
             next => {
                 metadataMock = new MetadataMock();
-                httpServer = http.createServer((req, res) =>
+                httpServerSnapshot = http.createServer((req, res) =>
                     metadataMock.onRequest(req, res)).listen(7779);
+                httpServerLogs = http.createServer((req, res) =>
+                    metadataMock.onRequest(req, res)).listen(9000);
                 return next();
             },
             // next => {
@@ -112,13 +115,13 @@ describe.only('Ingest metadata to kafka', () => {
                     const buf = Buffer.from(logOffset.value, 'utf-8');
                     console.log('here is the buffer', buf);
                     return async.waterfall([
-                        next => zkClient.mkdirp(logOffset.path, buf, (err, res) => {
+                        fin => zkClient.mkdirp(logOffset.path, buf, (err, res) => {
                             console.log('trying to create logOffset', err, res);
-                            return next();
+                            return fin();
                         }),
-                        next => zkClient.setData(logOffset.path, buf, (err, res) => {
+                        fin => zkClient.setData(logOffset.path, buf, (err, res) => {
                             console.log('trying to set data to logOffset', err, res);
-                            return next();
+                            return fin();
                         }),
                     ], cb);
                 }, next);
@@ -147,7 +150,8 @@ describe.only('Ingest metadata to kafka', () => {
     });
 
     after(done => {
-        httpServer.close();
+        httpServerSnapshot.close();
+        httpServerLogs.close();
         done();
     });
 
@@ -163,7 +167,7 @@ describe.only('Ingest metadata to kafka', () => {
             // }),
             next => {
                 console.log('WE WILL PROCESS ALL LOG ENTRIES NOW');
-                queuePopulator.processAllLogEntries({ maxRead: 10 },
+                return queuePopulator.processAllLogEntries({ maxRead: 10 },
                 (err, counters) => {
                     console.log('attempting to process all log entries');
                     console.log(err, counters);

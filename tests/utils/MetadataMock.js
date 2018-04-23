@@ -160,7 +160,7 @@ class MetadataMock {
         }
         if (/\/_\/raft_sessions\/[1-8]\/bucket/.test(req.url)) {
             console.log('getting buckets for raft session');
-            const value = ['bucket1'];
+            const value = ['bucket1', 'bucket2'];
             res.writeHead(200, { 'content-type': 'application/json' });
             // return res.end(JSON.stringify(value));
             return res.end(JSON.stringify(value));
@@ -188,7 +188,6 @@ class MetadataMock {
                 metadata: 'dogsAreGood',
             }));
         } else if (/\/_\/raft_sessions\/[\d]*\/log\?begin=[\d]*&limit=[\d]*&targetLeader=false/.test(req.url)) {
-            console.log('getting raft logs from metadata mock!', mockLogs);
             return res.end(JSON.stringify(mockLogs));
         }
         //  else if() {
