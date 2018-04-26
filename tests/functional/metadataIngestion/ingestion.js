@@ -4,15 +4,17 @@ const kafka = require('node-rdkafka');
 const zookeeper = require('../../../lib/clients/zookeeper');
 
 const QueuePopulator = require('../../../lib/queuePopulator/QueuePopulator');
-const IngestionProducer =
-    require('../../../lib/queuePopulator/IngestionProducer');
 const MetadataMock = require('../../utils/MetadataMock');
 const testConfig = require('./config.json');
 
+const BackbeatTestConsumer = require('../../utils/BackbeatTestConsumer');
 const testKafkaConfig = {
     'metadata.broker.list': 'localhost:9092',
     'group.id': 'testid',
+    'enable.auto.commit': true,
 };
+
+const CONSUMER_TIMEOUT = 60000;
 
 const testZkPaths = [
     '/backbeat',
@@ -22,34 +24,13 @@ const testZkPaths = [
     '/backbeat/ingestion/source1/raft-id-dispatcher/leaders',
     '/backbeat/ingestion/source1/raft-id-dispatcher/owners',
     '/backbeat/ingestion/source1/raft-id-dispatcher/provisions/1',
-    '/backbeat/ingestion/source1/raft-id-dispatcher/provisions/2',
-    '/backbeat/ingestion/source1/raft-id-dispatcher/provisions/3',
-    '/backbeat/ingestion/source1/raft-id-dispatcher/provisions/4',
-    '/backbeat/ingestion/source1/raft-id-dispatcher/provisions/5',
-    '/backbeat/ingestion/source1/raft-id-dispatcher/provisions/6',
-    '/backbeat/ingestion/source1/raft-id-dispatcher/provisions/7',
-    '/backbeat/ingestion/source1/raft-id-dispatcher/provisions/8',
     '/queue-populator',
     '/queue-populator/logState',
     '/queue-populator/logState/raft_1',
-    '/queue-populator/logState/raft_2',
-    '/queue-populator/logState/raft_3',
-    '/queue-populator/logState/raft_4',
-    '/queue-populator/logState/raft_5',
-    '/queue-populator/logState/raft_6',
-    '/queue-populator/logState/raft_7',
-    '/queue-populator/logState/raft_8',
 ];
 
 const logOffsetPaths = [
     { path: '/queue-populator/logState/raft_1/logOffset', value: '1' },
-    { path: '/queue-populator/logState/raft_2/logOffset', value: '1' },
-    { path: '/queue-populator/logState/raft_3/logOffset', value: '1' },
-    { path: '/queue-populator/logState/raft_4/logOffset', value: '1' },
-    { path: '/queue-populator/logState/raft_5/logOffset', value: '1' },
-    { path: '/queue-populator/logState/raft_6/logOffset', value: '1' },
-    { path: '/queue-populator/logState/raft_7/logOffset', value: '1' },
-    { path: '/queue-populator/logState/raft_8/logOffset', value: '1' },
 ];
 
 describe.only('Ingest metadata to kafka', () => {
@@ -63,15 +44,20 @@ describe.only('Ingest metadata to kafka', () => {
     before(function before(done) {
         async.waterfall([
             next => {
+                // kafkaConsumer = new kafka.kafkaConsumer({
+                //     kafka: { hosts: '127.0.0.1:9092' },
+                //     topic: 'backbeat-ingestion',
+                //     groupId: 'testid',
+                // });
                 kafkaConsumer = new kafka.KafkaConsumer(testKafkaConfig);
-                return next();
+                kafkaConsumer.connect();
+                return kafkaConsumer.once('ready', () => {
+                    return next();
+                });
             },
             next => {
-                kafkaConsumer.connect({ allTopics: true }, (err, res) => {
-                    console.log('attempting to connect to kafkaConsumer');
-                    console.log(err, res);
-                    return next(err);
-                });
+                kafkaConsumer.subscribe(['backbeat-ingestion']);
+                setTimeout(next, 2000);
             },
             next => {
                 metadataMock = new MetadataMock();
@@ -141,7 +127,7 @@ describe.only('Ingest metadata to kafka', () => {
                 //     return next();
                 // });
                 queuePopulator.open(() => {});
-                queuePopulator.on('logReady', (err, res) => {
+                queuePopulator.on('logReady', () => {
                     console.log('LOG IS READY');
                     return next();
                 });
@@ -175,12 +161,29 @@ describe.only('Ingest metadata to kafka', () => {
                 });
             },
             next => {
-                return kafkaConsumer.getMetadata({}, (err, res) => {
-                    console.log('Getting metadata from kafkaConsumer', err);
-                    console.log('Getting metadata from kafkaConsumer', res);
+                const stream = kafka.KafkaConsumer.createReadStream(testKafkaConfig, {},  {
+                    topics: 'backbeat-ingestion',
+                });
+                
+                stream.on('error', function (err) {
+                    console.log('ERR', err);
+                });
+                
+                stream.on('data', data => {
+                    console.log('data from stream', data);
+                    console.log('data from stream to string');
+                });
+                // kafkaConsumer.consume();
+                // kafkaConsumer.getMetadata({ topic: 'backbeat-ingestion' }, (err, metadata) => {
+                //     console.log(metadata);
+                //     console.log(metadata.topics[2]);
+                //     kafkaConsumer.consume();
+                // });
+                // return next();
+                stream.on('end', () => {
                     return next();
                 });
-            }
+            },
         ], () => {
             console.log('finishing');
             return done();

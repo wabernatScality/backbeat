@@ -72,6 +72,7 @@ class BackbeatTestConsumer extends BackbeatConsumer {
     }
 
     _expectMessages(messages, timeout, ordered, cb) {
+        console.log('MESSAGES', messages);
         const cbOnce = jsutil.once(err => {
             this._expectVars = null;
             return cb(err);
