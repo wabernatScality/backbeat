@@ -69,35 +69,6 @@
                     { "site": "test-site-2", "type": "aws_s3" }
                 ]
             }
-        },
-        "lifecycle": {
-            "zookeeperPath": "/lifecycletest",
-            "bucketTasksTopic": "backbeat-test-dummy-bucket-task",
-            "objectTasksTopic": "backbeat-test-dummy-object-task",
-            "conductor": {
-                "cronRule": "0 */5 * * * *"
-            },
-            "producer": {
-                "groupId": "backbeat-lifecycle-producer-test-group",
-                "retryTimeoutS": 300,
-                "concurrency": 10
-            },
-            "consumer": {
-                "groupId": "backbeat-lifecycle-consumer-test-group",
-                "retryTimeoutS": 300,
-                "concurrency": 10
-            },
-            "rules": {
-                "expiration": {
-                    "enabled": true
-                },
-                "noncurrentVersionExpiration": {
-                    "enabled": true
-                },
-                "abortIncompleteMultipartUpload": {
-                    "enabled": true
-                }
-            }
         }
     },
     "log": {

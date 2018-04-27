@@ -7,14 +7,11 @@ const QueuePopulator = require('../../../lib/queuePopulator/QueuePopulator');
 const MetadataMock = require('../../utils/MetadataMock');
 const testConfig = require('./config.json');
 
-const BackbeatTestConsumer = require('../../utils/BackbeatTestConsumer');
 const testKafkaConfig = {
     'metadata.broker.list': 'localhost:9092',
     'group.id': 'testid',
     'enable.auto.commit': true,
 };
-
-const CONSUMER_TIMEOUT = 60000;
 
 const testZkPaths = [
     '/backbeat',
@@ -37,28 +34,11 @@ describe.only('Ingest metadata to kafka', () => {
     let metadataMock;
     let httpServerSnapshot;
     let httpServerLogs;
-    let kafkaConsumer;
     let queuePopulator;
     let zkClient;
 
-    before(function before(done) {
+    before(done => {
         async.waterfall([
-            next => {
-                // kafkaConsumer = new kafka.kafkaConsumer({
-                //     kafka: { hosts: '127.0.0.1:9092' },
-                //     topic: 'backbeat-ingestion',
-                //     groupId: 'testid',
-                // });
-                kafkaConsumer = new kafka.KafkaConsumer(testKafkaConfig);
-                kafkaConsumer.connect();
-                return kafkaConsumer.once('ready', () => {
-                    return next();
-                });
-            },
-            next => {
-                kafkaConsumer.subscribe(['backbeat-ingestion']);
-                setTimeout(next, 2000);
-            },
             next => {
                 metadataMock = new MetadataMock();
                 httpServerSnapshot = http.createServer((req, res) =>
@@ -67,13 +47,6 @@ describe.only('Ingest metadata to kafka', () => {
                     metadataMock.onRequest(req, res)).listen(9000);
                 return next();
             },
-            // next => {
-            //     iProducer = new IngestionProducer({
-            //         host: 'localhost:7779',
-            //         port: 7779,
-            //     });
-            //     return next();
-            // },
             next => {
                 zkClient = zookeeper.createClient('127.0.0.1:2181');
                 zkClient.connect();
@@ -113,19 +86,9 @@ describe.only('Ingest metadata to kafka', () => {
                 }, next);
             },
             next => {
-                return zkClient.getData(logOffsetPaths[0].path, (err, data) => {
-                    console.log(`DATA AT ${logOffsetPaths[0]}.path`, err, data);
-                    return next();
-                });
-            },
-            next => {
                 queuePopulator = new QueuePopulator(testConfig.zookeeper,
                 testConfig.kafka, testConfig.queuePopulator, testConfig.metrics,
                 testConfig.redis, testConfig.extensions, testConfig.ingestion);
-                // return queuePopulator.open((err, res) => {
-                //     console.log('opening queue populator', err, res);
-                //     return next();
-                // });
                 queuePopulator.open(() => {});
                 queuePopulator.on('logReady', () => {
                     console.log('LOG IS READY');
@@ -142,16 +105,8 @@ describe.only('Ingest metadata to kafka', () => {
     });
 
     it('should store metadata ingested from remote cloud backend', done => {
-        return async.waterfall([
-            // next => {
-            //     console.log('this.iProducer', iProducer);
-            //     next();
-            // },
-            // next => iProducer.snapshot(1, (err, res) => {
-            //     console.log('WE PRODUCED SNAPSHOT', res);
-            //     return next();
-            // }),
-            next => {
+        async.parallel([
+            function processLog(next) {
                 console.log('WE WILL PROCESS ALL LOG ENTRIES NOW');
                 return queuePopulator.processAllLogEntries({ maxRead: 10 },
                 (err, counters) => {
@@ -160,8 +115,8 @@ describe.only('Ingest metadata to kafka', () => {
                     return next();
                 });
             },
-            next => {
-                const stream = kafka.KafkaConsumer.createReadStream(testKafkaConfig, {},  {
+            function readstream(next) {
+                const stream = kafka.KafkaConsumer.createReadStream(testKafkaConfig, {}, {
                     topics: 'backbeat-ingestion',
                 });
                 
@@ -173,13 +128,6 @@ describe.only('Ingest metadata to kafka', () => {
                     console.log('data from stream', data);
                     console.log('data from stream to string');
                 });
-                // kafkaConsumer.consume();
-                // kafkaConsumer.getMetadata({ topic: 'backbeat-ingestion' }, (err, metadata) => {
-                //     console.log(metadata);
-                //     console.log(metadata.topics[2]);
-                //     kafkaConsumer.consume();
-                // });
-                // return next();
                 stream.on('end', () => {
                     return next();
                 });
