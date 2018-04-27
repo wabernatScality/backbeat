@@ -6,7 +6,6 @@ class IngestionQueuePopulator extends QueuePopulatorExtension {
     constructor(params) {
         super(params);
         this.config = params.config;
-        console.log('INGESTIONQUEUEPOPULATOR');
     }
 
     createZkPath(cb, source) {
@@ -38,17 +37,19 @@ class IngestionQueuePopulator extends QueuePopulatorExtension {
                     }
                     return this.zkClient.mkdirp(path, err => {
                         if (err) {
-                            this.log.error('could not create path in zookeeper', {
+                            this.log.error('could not create path in ' +
+                            'zookeeper', {
                                 method: 'IngestionQueuePopulator.createZkPath',
                                 zookeeperPath,
                                 error: err,
                             });
-                            // return cb(err);
+                            return cb(err);
                         }
-                        // return cb();
+                        return cb();
                     });
                 });
             }
+            return cb();
         }));
     }
 
