@@ -112,6 +112,46 @@ program
         });
     });
 
+program
+    .command('multi-setup')
+    .option('--source-bucket <name>', '[required] source bucket name')
+    .option('--source-profile <name>',
+            '[required] source aws/credentials profile')
+    .option('--multi-sites <site1,site2,...>', '[required] comma separated ' +
+            'list of sites"')
+    .action(options => {
+        const log = new Logger('BackbeatSetup').newRequestLogger();
+        const sourceBucket = options.sourceBucket;
+        const sourceProfile = options.sourceProfile;
+        const multiSites = options.multiSites;
+
+        // Required options
+        if (!sourceBucket || !sourceProfile || !multiSites ||
+        multiSites.split(',').some(site => site.length === 0)) {
+            program.commands.find(n => n._name === 'multi-setup').outputHelp();
+            process.stdout.write('\n');
+            process.exit(1);
+        }
+
+        const s = _createSetupReplication('setup', {
+            sourceBucket,
+            sourceProfile,
+            siteName: multiSites,
+            targetBucket: sourceBucket,
+        }, log);
+        s.setupReplication(err => {
+            if (err) {
+                log.error('replication setup failed', {
+                    errCode: err.code,
+                    error: err.message,
+                });
+                process.exit(1);
+            }
+            log.info('replication is correctly setup for multiple sites');
+            process.exit();
+        });
+    });
+
 program.parse(process.argv);
 const validCommands = program.commands.map(n => n._name);
 
