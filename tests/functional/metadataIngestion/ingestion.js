@@ -45,7 +45,7 @@ const expectedLogs = [
     '\\"serverSideEncryption\\":null,\\"versioningConfiguration\\":null,' +
     '\\"locationConstraint\\":null,\\"cors\\":null,' +
     '\\"replicationConfiguration\\":null,\\"lifecycleConfiguration\\":null}"}',
-    '{"type":"put","bucket":"xxxfriday10","key":"xxxfriday10","value":' +
+    '{"type":"put","bucket":"xxxfriday11","key":"xxxfriday10","value":' +
     '"{\\"acl\\":{\\"Canned\\":\\"private\\",\\"FULL_CONTROL\\":[],\\' +
     '"WRITE\\":[],\\"WRITE_ACP\\":[],\\"READ\\":[],\\"READ_ACP\\":[]},' +
     '\\"name\\":\\"xxxfriday10\\",\\"owner\\":' +
