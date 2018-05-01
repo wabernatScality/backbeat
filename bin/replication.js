@@ -1,4 +1,3 @@
-const async = require('async');
 const program = require('commander');
 const { SharedIniFileCredentials } = require('aws-sdk');
 
@@ -112,66 +111,37 @@ program.command('multi-setup')
             '[required] source aws/credentials profile')
     .option('--multi-sites <site1,site2,...>', '[required] comma separated ' +
             'list of sites"')
-    .option('--target-profile <name>', '[optional] target ' +
-            'aws/credentials profile (this is in addition to multi-sites)')
     .action(options => {
         const log = new Logger('BackbeatSetup').newRequestLogger();
         const sourceBucket = options.sourceBucket;
         const sourceProfile = options.sourceProfile;
-        const targetProfile = options.targetProfile;
         const multiSites = options.multiSites;
 
+        const sites = multiSites.split(',');
+
         // Required options
-        if (!sourceBucket || !sourceProfile || !multiSites) {
+        if (!sourceBucket || !sourceProfile || !multiSites ||
+        sites.some(site => site.length === 0)) {
             program.commands.find(n => n._name === 'multi-setup').outputHelp();
             process.stdout.write('\n');
             process.exit(1);
         }
 
-        const sites = options.multiSites.split(',');
-        let toProcessSites = sites.map(site => (
-            {
-                sourceBucket,
-                sourceProfile,
-                targetBucket: sourceBucket,
-                siteName: site,
-            }
-        ));
-
-        if (targetProfile) {
-            toProcessSites.push({
-                sourceBucket,
-                sourceProfile,
-                targetBucket: sourceBucket,
-                targetProfile,
-            });
-        }
-
-        toProcessSites = toProcessSites.map(site =>
-            _createSetupReplication('setup', site, log));
-
-        async.each(toProcessSites, (endpoint, next) => {
-            endpoint.setupReplication(err => {
-                if (err) {
-                    log.error('replication setup failed', {
-                        errCode: err.code,
-                        error: err.message,
-                        targetSiteName: endpoint.getTargetSiteName(),
-                        targetBucketName: endpoint.getTargetBucketName(),
-                    });
-                    process.exit(1);
-                    return next(err);
-                }
-                log.info('setup completed for bucket: ' +
-                    `${endpoint.getTargetBucketName}`);
-                return next();
-            });
-        }, err => {
+        const s = _createSetupReplication('setup', {
+            sourceBucket,
+            sourceProfile,
+            siteName: multiSites,
+            targetBucket: sourceBucket,
+        });
+        s.setupReplication(err => {
             if (err) {
-                log.error('replication setup for multiple sites failed');
+                log.error('replication setup failed', {
+                    errCode: err.code,
+                    error: err.message,
+                });
                 process.exit(1);
             }
-            log.info('replication setup successful for multiple sites');
+            log.info('replication is correctly setup');
             process.exit();
         });
     });

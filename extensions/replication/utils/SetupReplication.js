@@ -111,14 +111,6 @@ class SetupReplication extends BackbeatTask {
         };
     }
 
-    getTargetBucketName() {
-        return this._targetBucket;
-    }
-
-    getTargetSiteName() {
-        return this._targetSiteName;
-    }
-
     checkSanity(cb) {
         return async.waterfall([
             next => this._isValidBucket('source', next),
