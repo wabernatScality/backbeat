@@ -6,6 +6,7 @@ const Logger = require('werelogs').Logger;
 const errors = require('arsenal').errors;
 
 const BackbeatConsumer = require('../../../lib/BackbeatConsumer');
+const RetryProducer = require('../../../lib/RetryProducer');
 const VaultClientCache = require('../../../lib/clients/VaultClientCache');
 const ReplicationTaskScheduler = require('../utils/ReplicationTaskScheduler');
 const redisClient = require('../utils/getRedisClient')();
@@ -92,6 +93,9 @@ class ReplicationStatusProcessor {
      * @return {undefined}
      */
     start(options, cb) {
+        // TODO: Instantiate BackbeatProducer which will allow pushing to
+        // the retry topic.
+        this._retryProducer = new RetryProducer(this.kafkaConfig);
         this._consumer = new BackbeatConsumer({
             kafka: { hosts: this.kafkaConfig.hosts },
             topic: this.repConfig.replicationStatusTopic,
@@ -107,8 +111,10 @@ class ReplicationStatusProcessor {
                              'consume replication status entries');
             this._consumer.subscribe();
             if (cb) {
-                cb();
+                return this._retryProducer.setupProducer(cb);
             }
+            // TODO: How to handle if no callback in this method?
+            this._retryProducer.setupProducer(console.log);
         });
     }
 
@@ -145,11 +151,19 @@ class ReplicationStatusProcessor {
             const { status, site } = backend;
             if (status === 'FAILED' && site === queueEntry.getSite()) {
                 const field = `${bucket}:${key}:${versionId}:${site}`;
-                const value = JSON.parse(kafkaEntry.value);
-                fields.push(field, JSON.stringify(value));
+                // const value = JSON.parse(kafkaEntry.value);
+                fields.push(field, kafkaEntry.value);
             }
             return undefined;
         });
+        // The global status could be FAILED, while this particular site did
+        // not fail.
+        if (fields.length > 0) {
+            return this._retryProducer.publishRetryEntry(fields, cb);
+        }
+        return cb();
+
+        // TODO: Move this to the Retry consumer.
         const cmds = ['hmset', redisKeys.failedCRR, ...fields];
         return redisClient.batch([cmds], (err, res) => {
             if (err) {
@@ -183,6 +197,7 @@ class ReplicationStatusProcessor {
             task = new UpdateReplicationStatus(this);
         }
         if (task) {
+            // TODO: Use async series here.
             return this._setFailedKeys(sourceEntry, kafkaEntry, err => {
                 if (err) {
                     this.logger.error('error setting redis hash key', {
