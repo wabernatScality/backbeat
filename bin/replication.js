@@ -110,10 +110,9 @@ program.command('multi-setup')
     .option('--source-bucket <name>', '[required] source bucket name')
     .option('--source-profile <name>',
             '[required] source aws/credentials profile')
-    .option('--multi-sites <bucket1:site1,bucket2:site2,...>', '[required] ' +
-            'comma separated list of sites. Each site must give a colon ' +
-            'separated "<bucket name>:<site name>"')
-    .option('--target-profile <bucket:name>', '[optional] target ' +
+    .option('--multi-sites <site1,site2,...>', '[required] comma separated ' +
+            'list of sites"')
+    .option('--target-profile <name>', '[optional] target ' +
             'aws/credentials profile (this is in addition to multi-sites)')
     .action(options => {
         const log = new Logger('BackbeatSetup').newRequestLogger();
@@ -129,49 +128,29 @@ program.command('multi-setup')
             process.exit(1);
         }
 
-        const toProcessSites = [];
         const sites = options.multiSites.split(',');
-        sites.forEach(site => {
-            const [targetBucket, siteName] = site.split(':');
-
-            if (!targetBucket || !siteName) {
-                log.error('incorrect format given for option multi-sites', {
-                    targetBucket,
-                    siteName,
-                });
-                process.exit(1);
-            }
-            toProcessSites.push({
+        let toProcessSites = sites.map(site => (
+            {
                 sourceBucket,
                 sourceProfile,
-                targetBucket,
-                siteName,
-            });
-        });
+                targetBucket: sourceBucket,
+                siteName: site,
+            }
+        ));
 
         if (targetProfile) {
-            const [targetBucket, profileName] = targetProfile.split(':');
-
-            if (!targetBucket || !profileName) {
-                log.error('incorrect format given for option target-profile', {
-                    targetBucket,
-                    profileName,
-                });
-                process.exit(1);
-            }
-
             toProcessSites.push({
                 sourceBucket,
                 sourceProfile,
-                targetBucket,
-                targetProfile: profileName,
+                targetBucket: sourceBucket,
+                targetProfile,
             });
         }
 
-        toProcessSites.map(site => _createSetupReplication('setup', site, log));
+        toProcessSites = toProcessSites.map(site =>
+            _createSetupReplication('setup', site, log));
 
         async.each(toProcessSites, (endpoint, next) => {
-            // const s = _createSetupReplication()
             endpoint.setupReplication(err => {
                 if (err) {
                     log.error('replication setup failed', {
