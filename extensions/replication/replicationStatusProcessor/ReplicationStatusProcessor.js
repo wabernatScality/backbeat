@@ -9,11 +9,9 @@ const BackbeatConsumer = require('../../../lib/BackbeatConsumer');
 const RetryProducer = require('../../../lib/RetryProducer');
 const VaultClientCache = require('../../../lib/clients/VaultClientCache');
 const ReplicationTaskScheduler = require('../utils/ReplicationTaskScheduler');
-const redisClient = require('../utils/getRedisClient')();
 const UpdateReplicationStatus = require('../tasks/UpdateReplicationStatus');
 const QueueEntry = require('../../../lib/models/QueueEntry');
 const ObjectQueueEntry = require('../utils/ObjectQueueEntry');
-const { redisKeys } = require('../constants');
 
 /**
  * @class ReplicationStatusProcessor
@@ -162,16 +160,6 @@ class ReplicationStatusProcessor {
             return this._retryProducer.publishRetryEntry(fields, cb);
         }
         return cb();
-
-        // TODO: Move this to the Retry consumer.
-        const cmds = ['hmset', redisKeys.failedCRR, ...fields];
-        return redisClient.batch([cmds], (err, res) => {
-            if (err) {
-                return cb(err);
-            }
-            const [cmdErr] = res[0];
-            return cb(cmdErr);
-        });
     }
 
     /**
