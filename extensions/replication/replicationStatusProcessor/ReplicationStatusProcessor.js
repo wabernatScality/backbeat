@@ -1,6 +1,7 @@
 'use strict'; // eslint-disable-line
 
 const http = require('http');
+const async = require('async');
 
 const Logger = require('werelogs').Logger;
 const errors = require('arsenal').errors;
@@ -91,8 +92,6 @@ class ReplicationStatusProcessor {
      * @return {undefined}
      */
     start(options, cb) {
-        // TODO: Instantiate BackbeatProducer which will allow pushing to
-        // the retry topic.
         this._retryProducer = new RetryProducer(this.kafkaConfig);
         this._consumer = new BackbeatConsumer({
             kafka: { hosts: this.kafkaConfig.hosts },
@@ -108,11 +107,7 @@ class ReplicationStatusProcessor {
             this.logger.info('replication status processor is ready to ' +
                              'consume replication status entries');
             this._consumer.subscribe();
-            if (cb) {
-                return this._retryProducer.setupProducer(cb);
-            }
-            // TODO: How to handle if no callback in this method?
-            this._retryProducer.setupProducer(console.log);
+            this._retryProducer.setupProducer(cb);
         });
     }
 
@@ -185,16 +180,11 @@ class ReplicationStatusProcessor {
             task = new UpdateReplicationStatus(this);
         }
         if (task) {
-            // TODO: Use async series here.
-            return this._setFailedKeys(sourceEntry, kafkaEntry, err => {
-                if (err) {
-                    this.logger.error('error setting redis hash key', {
-                        error: err,
-                    });
-                }
-                return this.taskScheduler.push({ task, entry: sourceEntry },
-                    sourceEntry.getCanonicalKey(), done);
-            });
+            async.parallel([
+                next => this._setFailedKeys(sourceEntry, kafkaEntry, next),
+                next => this.taskScheduler.push({ task, entry: sourceEntry },
+                    sourceEntry.getCanonicalKey(), next)
+            ], done)
         }
         this.logger.warn('skipping unknown source entry',
                          { entry: sourceEntry.getLogInfo() });
