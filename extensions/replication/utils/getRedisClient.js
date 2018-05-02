@@ -9,10 +9,7 @@ werelogs.configure({
 });
 
 function getRedisClient() {
-    const redisConfig = Object.assign({}, config.redis, {
-        enableOfflineQueue: false,
-    });
-    return new RedisClient(redisConfig, log);
+    return new RedisClient(config.redis, log);
 }
 
 module.exports = getRedisClient;
