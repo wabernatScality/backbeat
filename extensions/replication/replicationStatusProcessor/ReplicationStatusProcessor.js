@@ -133,7 +133,7 @@ class ReplicationStatusProcessor {
      * Set the Redis hash key for each failed backend.
      * @param {QueueEntry} queueEntry - The queue entry with the failed status.
      * @param {Object} kafkaEntry - The kafka entry with the failed status.
-     * @param {Function} cb          [description]
+     * @param {Function} cb - The callback function
      * @return {undefined}
      */
     _setFailedKeys(queueEntry, kafkaEntry, cb) {
@@ -141,23 +141,23 @@ class ReplicationStatusProcessor {
         if (status !== 'FAILED') {
             return process.nextTick(cb);
         }
-        const bucket = queueEntry.getBucket();
-        const key = queueEntry.getObjectKey();
-        const versionId = queueEntry.getEncodedVersionId();
-        const fields = [];
-        backends.forEach(backend => {
-            const { status, site } = backend;
+        let message;
+        for (let i = 0; i < backends.length; i++) {
+            const { status, site } = backends[i];
             if (status === 'FAILED' && site === queueEntry.getSite()) {
-                const field = `${bucket}:${key}:${versionId}:${site}`;
-                // const value = JSON.parse(kafkaEntry.value);
-                fields.push(field, kafkaEntry.value);
+                const bucket = queueEntry.getBucket();
+                const key = queueEntry.getObjectKey();
+                const versionId = queueEntry.getEncodedVersionId();
+                message = {
+                    field: `${bucket}:${key}:${versionId}:${site}`,
+                    value: Buffer.from(kafkaEntry.value).toString(),
+                }
+                break;
             }
-            return undefined;
-        });
-        // The global status could be FAILED, while this particular site did
-        // not fail.
-        if (fields.length > 0) {
-            return this._retryProducer.publishRetryEntry(fields, cb);
+        }
+        if (message) {
+            return this._retryProducer
+                .publishRetryEntry(JSON.stringify(message), cb);
         }
         return cb();
     }
